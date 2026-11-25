@@ -16,10 +16,17 @@
 	import { AGENT_IDS, ORDER_DONE } from '$lib/types';
 	import type { Bastion3DState } from '$lib/stores/bastion3d.svelte';
 	import type { DemoTrigger } from '$lib/demo';
+	import type { LightMode } from '$lib/village/lighting';
 
 	let { store }: { store: Bastion3DState } = $props();
 
 	let dockOpen = $state(true);
+
+	const LIGHTS: { mode: LightMode; label: string; icon: string }[] = [
+		{ mode: 'golden', label: 'Golden hour', icon: 'mdi:weather-sunset' },
+		{ mode: 'day', label: 'Day', icon: 'mdi:weather-sunny' },
+		{ mode: 'night', label: 'Night', icon: 'mdi:weather-night' }
+	];
 
 	const TRIGGERS: { kind: DemoTrigger; label: string; icon: string }[] = [
 		{ kind: 'containerDown', label: 'Container down', icon: 'mdi:server-off' },
@@ -200,20 +207,16 @@
 			<span>{store.meeting.active ? 'End meeting' : 'Call meeting'}</span>
 		</button>
 		<div class="seg">
-			<button
-				aria-pressed={store.dayMode === 'twilight'}
-				onclick={() => (store.dayMode = 'twilight')}
-				aria-label="Twilight"
-			>
-				<Icon icon="mdi:weather-night" />
-			</button>
-			<button
-				aria-pressed={store.dayMode === 'day'}
-				onclick={() => (store.dayMode = 'day')}
-				aria-label="Day"
-			>
-				<Icon icon="mdi:weather-sunny" />
-			</button>
+			{#each LIGHTS as option (option.mode)}
+				<button
+					aria-pressed={store.light === option.mode}
+					onclick={() => store.setLight(option.mode)}
+					aria-label={option.label}
+					title={option.label}
+				>
+					<Icon icon={option.icon} />
+				</button>
+			{/each}
 		</div>
 	</footer>
 

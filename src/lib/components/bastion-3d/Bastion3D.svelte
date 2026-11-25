@@ -20,7 +20,10 @@
 </script>
 
 <div class="bastion3d">
-	<BastionViewport store={bastion3d} {dev} />
+	<!-- a new quality builds the 3D view again -->
+	{#key bastion3d.quality}
+		<BastionViewport store={bastion3d} {dev} />
+	{/key}
 	<BastionHUD store={bastion3d} />
 </div>
 

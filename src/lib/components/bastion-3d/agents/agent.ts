@@ -14,15 +14,20 @@
  */
 import {
 	CapsuleGeometry,
+	CircleGeometry,
 	Color,
 	Group,
 	Mesh,
+	MeshBasicMaterial,
 	MeshStandardMaterial,
 	Vector3,
+	type Material,
 	type WebGLRenderer
 } from 'three';
+import { PEOPLE_SCALE } from '$lib/village/lighting';
 import { Disposer } from '../disposer';
 import { setPick, type FrameContext } from '../scene/common';
+import { contactShadowMaterial } from '../scene/materials';
 import { recentMotion } from '../scene/visionTower';
 import {
 	createCharacter,
@@ -157,7 +162,8 @@ export class AgentActor {
 	constructor(
 		id: AgentId,
 		d: Disposer,
-		private random: () => number = Math.random
+		private random: () => number = Math.random,
+		shadow?: Material
 	) {
 		this.id = id;
 		this.root.name = id;
@@ -167,10 +173,30 @@ export class AgentActor {
 		const material = d.track(
 			new MeshStandardMaterial({ color: new Color(LOOKS[id].accent), roughness: 0.6 })
 		);
-		this.placeholder = new Mesh(d.track(new CapsuleGeometry(0.28, 1.1, 4, 12)), material);
-		this.placeholder.position.y = 0.85;
+		this.placeholder = new Mesh(
+			d.track(new CapsuleGeometry(0.28 * PEOPLE_SCALE, 1.1 * PEOPLE_SCALE, 4, 12)),
+			material
+		);
+		this.placeholder.position.y = 0.85 * PEOPLE_SCALE;
 		this.placeholder.castShadow = true;
 		this.root.add(this.placeholder);
+		// a soft contact shadow, so feet sit on the ground in any light
+		const blob = new Mesh(
+			d.track(new CircleGeometry(0.55, 20)),
+			shadow ??
+				d.track(
+					new MeshBasicMaterial({
+						color: 0x000000,
+						transparent: true,
+						opacity: 0.3,
+						depthWrite: false
+					})
+				)
+		);
+		blob.rotation.x = -Math.PI / 2;
+		blob.position.y = 0.035;
+		blob.renderOrder = 1;
+		this.root.add(blob);
 		this.linger = random() * 4;
 		setPick(this.root, { kind: 'agent', id });
 	}
@@ -305,8 +331,9 @@ export class AgentActor {
 
 		if (this.character) {
 			this.character.head.getWorldPosition(this.anchor);
-			this.anchor.y += 0.45;
-		} else this.anchor.set(pos.x, 2.1, pos.z);
+			// just above the head
+			this.anchor.y += 0.32 * PEOPLE_SCALE;
+		} else this.anchor.set(pos.x, 1.9 * PEOPLE_SCALE, pos.z);
 	}
 
 	private turnTo(heading: number, dt: number, rate: number) {
@@ -322,8 +349,9 @@ export function buildAgents() {
 	const group = new Group();
 	group.name = 'agents';
 	const actors = new Map<AgentId, AgentActor>();
+	const shadow = contactShadowMaterial(d);
 	for (const id of AGENT_IDS) {
-		const actor = new AgentActor(id, d);
+		const actor = new AgentActor(id, d, Math.random, shadow);
 		actors.set(id, actor);
 		group.add(actor.root);
 	}

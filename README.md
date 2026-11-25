@@ -31,6 +31,12 @@ A 3D home and NOC command center for the Bastion apps on one server: a two-story
 
 Each robot's inspector has **Change the code**: describe the change, pick the apps (the robot's own is picked already), **File**. The orchestrator session on the Mac picks the order up through `/orders` (`ORDERS_TOKEN`), plans it, and the plan comes back for you to **Approve**, **Ask for changes** or **Reject**. After approval the app's session codes it and the orchestrator ships it; every step shows on the order and the robots act it out. The protocol is in [docs/ORCHESTRATOR.md](docs/ORCHESTRATOR.md). The robots' chat stays read-only: a change in the house is a HUD button, a change in the code is a work order.
 
+## The village's look
+
+The buildings and nature come from two more CC0 kits by Quaternius (static/models/CREDITS.md), packed by `scripts/build-kits.mjs`; each house is assembled from the building kit on its 2 m grid and merged into a few meshes per material. Lights: Golden hour (default), Day and Night in the bottom bar; ⚙ Quality: High (bloom, 2048 shadows) or Low (no bloom, 1024 shadows, half the trees and flowers), both remembered in the browser. Only a few lights are real (the lamps nearest the camera, the hall, the core, the lantern, the pool, the alarm strobe); windows and other lamps glow.
+
+`node scripts/shots.mjs` (with the app running on :5040) takes screenshots in demo mode and measures fps in headless Chromium on the GPU, into `.screenshots/`.
+
 ## Login
 
 The shared Bastion login: the `bastion_session` cookie of any Bastion app on the server opens this one. With `APP_PASSWORD`, the login form here makes the same cookie.

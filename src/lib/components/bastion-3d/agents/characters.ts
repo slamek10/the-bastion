@@ -39,95 +39,13 @@ import {
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { CLIP_NAMES, type Clip } from '$lib/village/animation';
+import { PEOPLE_SCALE } from '$lib/village/lighting';
 import type { Disposer } from '../disposer';
 import type { AgentId } from '$lib/types';
 
-type Accessory = 'tie' | 'hood' | 'cap' | 'apron' | 'binoculars' | 'scarf';
+import { LOOKS, type Accessory, type Look } from './looks';
 
-export interface Look {
-	body: 'male' | 'female';
-	skin: 'dark' | 'light';
-	/** tints the skin texture a little, for more variety */
-	skinTint: number;
-	/** hairstyle node names in hair.glb */
-	hair: string[];
-	hairColor: number;
-	shirt: number;
-	trousers: number;
-	shoes: number;
-	/** the agent's colour: the badge on its chest */
-	accent: number;
-	accessories: Accessory[];
-	height: number;
-}
-
-export const LOOKS: Record<AgentId, Look> = {
-	orchestrator: {
-		body: 'male',
-		skin: 'light',
-		skinTint: 0xfff4ea,
-		hair: ['Hair_SimpleParted'],
-		hairColor: 0x6b4a32,
-		shirt: 0x26365a,
-		trousers: 0x1d2536,
-		shoes: 0x1b1b1f,
-		accent: 0xa78bfa,
-		accessories: ['tie'],
-		height: 1.8
-	},
-	watchdog: {
-		body: 'male',
-		skin: 'dark',
-		skinTint: 0xffffff,
-		hair: ['Hair_Buzzed', 'Hair_Beard'],
-		hairColor: 0x2a211b,
-		shirt: 0x3d4a3a,
-		trousers: 0x34506e,
-		shoes: 0xe8e4dc,
-		accent: 0xf59e0b,
-		accessories: ['hood'],
-		height: 1.78
-	},
-	thermal: {
-		body: 'male',
-		skin: 'light',
-		skinTint: 0xffe2cc,
-		hair: ['Hair_Buzzed'],
-		hairColor: 0xb3622c,
-		shirt: 0xd9692a,
-		trousers: 0xc75a20,
-		shoes: 0x5a3b22,
-		accent: 0xf97316,
-		accessories: ['cap'],
-		height: 1.74
-	},
-	homekeeper: {
-		body: 'female',
-		skin: 'dark',
-		skinTint: 0xffffff,
-		hair: ['Hair_Buns'],
-		hairColor: 0x221a16,
-		shirt: 0x2f8f8a,
-		trousers: 0x5b4636,
-		shoes: 0x3a2a20,
-		accent: 0x22d3ee,
-		accessories: ['apron'],
-		height: 1.66
-	},
-	vision: {
-		body: 'female',
-		skin: 'light',
-		skinTint: 0xfff0e6,
-		hair: ['Hair_Long'],
-		hairColor: 0xd9b26a,
-		shirt: 0x5d6b3a,
-		trousers: 0x2d3a4a,
-		shoes: 0x3b2a1e,
-		accent: 0xef4444,
-		accessories: ['binoculars', 'scarf'],
-		height: 1.7
-	}
-};
+export { LOOKS, type Look };
 
 export interface CharacterAssets {
 	bodies: Record<Look['body'], GLTF>;
@@ -192,7 +110,8 @@ function dress(material: MeshStandardMaterial, look: Look, bones: Bone[], skin?:
 		uShirt: { value: new Color(look.shirt) },
 		uTrousers: { value: new Color(look.trousers) },
 		uShoes: { value: new Color(look.shoes) },
-		uSkinTint: { value: new Color(look.skinTint) }
+		uSkinTint: { value: new Color(look.skinTint) },
+		uRim: { value: new Color(0xffe2c0).multiplyScalar(0.35) }
 	};
 	dressed.onBeforeCompile = (shader) => {
 		Object.assign(shader.uniforms, uniforms);
@@ -216,17 +135,28 @@ function dress(material: MeshStandardMaterial, look: Look, bones: Bone[], skin?:
 		shader.fragmentShader = shader.fragmentShader
 			.replace(
 				'#include <common>',
-				`#include <common>\nuniform vec3 uShirt;\nuniform vec3 uTrousers;\nuniform vec3 uShoes;\nuniform vec3 uSkinTint;\nflat varying float vRegion;`
+				`#include <common>\nuniform vec3 uShirt;\nuniform vec3 uTrousers;\nuniform vec3 uShoes;\nuniform vec3 uSkinTint;\nuniform vec3 uRim;\nflat varying float vRegion;`
 			)
 			.replace(
 				'#include <map_fragment>',
 				`#include <map_fragment>
 				if (vRegion > 0.5) {
+					// smooth fabric: barely any of the body's shading, a fine weave
 					float shade = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
 					vec3 cloth = vRegion < 1.5 ? uShirt : (vRegion < 2.5 ? uTrousers : uShoes);
-					diffuseColor.rgb = cloth * (0.8 + 0.4 * shade);
+					float weave = 0.97 + 0.03 * sin(vMapUv.x * 900.0) * sin(vMapUv.y * 900.0);
+					diffuseColor.rgb = cloth * (0.9 + 0.15 * shade) * weave;
 				} else {
 					diffuseColor.rgb *= uSkinTint;
+				}`
+			)
+			.replace(
+				'#include <emissivemap_fragment>',
+				`#include <emissivemap_fragment>
+				{
+					// a soft rim light, so faces and outlines read at dusk
+					float facing = clamp(dot(normalize(vViewPosition), normal), 0.0, 1.0);
+					totalEmissiveRadiance += uRim * pow(1.0 - facing, 2.5);
 				}`
 			);
 	};
@@ -379,7 +309,8 @@ export function createCharacter(assets: CharacterAssets, id: AgentId, d: Dispose
 	// size: each look its own height
 	model.updateMatrixWorld(true);
 	const box = new Box3().setFromObject(model);
-	const scale = look.height / Math.max(0.5, box.max.y - box.min.y);
+	// storybook proportions next to the buildings (PEOPLE_SCALE), each look its own height
+	const scale = (look.height * PEOPLE_SCALE) / Math.max(0.5, box.max.y - box.min.y);
 
 	// accessories, placed at rest pose and carried by their bone
 	const kit: AccessoryKit = {
@@ -457,8 +388,8 @@ export function renderPortrait(
 	const head = new Vector3();
 	character.head.getWorldPosition(head);
 	const camera = new PerspectiveCamera(30, 1, 0.05, 10);
-	camera.position.set(head.x, head.y + 0.02, head.z + 0.85);
-	camera.lookAt(head.x, head.y - 0.04, head.z);
+	camera.position.set(head.x, head.y + 0.03 * PEOPLE_SCALE, head.z + 0.85 * PEOPLE_SCALE);
+	camera.lookAt(head.x, head.y - 0.05 * PEOPLE_SCALE, head.z);
 	const target = new WebGLRenderTarget(size, size);
 	renderer.setRenderTarget(target);
 	renderer.setClearColor(0x000000, 0);

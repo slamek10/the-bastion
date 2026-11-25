@@ -11,54 +11,73 @@ export interface Preset {
 	target: [number, number, number];
 }
 
+/** where the orbit camera may go: never under the ground, never so far the village is a map */
+export const ORBIT = {
+	minDistance: 5,
+	maxDistance: 75,
+	minPolar: 0.2,
+	maxPolar: 1.32,
+	/** the look-at point stays within this radius of the village centre */
+	targetRadius: 38
+};
+
 export const PRESETS: Preset[] = [
+	// a close three-quarter view: the village fills the screen, people are readable
 	{
 		id: 'overview',
 		label: 'Overview',
 		icon: 'mdi:home-group',
-		position: [30, 34, 42],
-		target: [0, 0, 0]
+		position: [31, 24, 24],
+		target: [1, 0, -1]
 	},
 	{
 		id: 'townhall',
 		label: 'Town Hall',
 		icon: 'mdi:town-hall',
-		position: [0, 9, -7],
-		target: [0, 0.8, -18.5]
+		position: [5, 11, -4.5],
+		target: [0, 0.8, -18.2]
 	},
 	{
 		id: 'forge',
 		label: 'Watch Forge',
 		icon: 'mdi:anvil',
-		position: [-13, 8, 0],
-		target: [-20, 1.5, -13]
+		position: [-13, 9.5, 1.5],
+		target: [-20, 1.6, -13]
 	},
 	{
 		id: 'boiler',
 		label: 'Boiler House',
 		icon: 'mdi:fire',
-		position: [-8, 8, 16],
-		target: [-21, 1.5, 10]
+		position: [-9, 7.5, 16],
+		target: [-20, 1.6, 10]
 	},
 	{
 		id: 'cottage',
 		label: 'Home Cottage',
 		icon: 'mdi:home-heart',
-		position: [4, 8, 10],
-		target: [-4, 1.5, 22]
+		position: [4, 8, 11],
+		target: [-4, 1.6, 21]
 	},
 	{
 		id: 'tower',
 		label: 'Vision Tower',
 		icon: 'mdi:cctv',
-		position: [12, 10, 2],
-		target: [21, 3, -8]
+		position: [6, 12, 6],
+		target: [21, 5.5, -8]
 	},
-	{ id: 'pond', label: 'Pond', icon: 'mdi:waves', position: [10, 11, 30], target: [18, 0, 12] }
+	{ id: 'pond', label: 'Pond', icon: 'mdi:waves', position: [9, 10, 28], target: [17, 0, 12] }
 ];
 
 export const presetById = (id: PresetId) =>
 	PRESETS.find((preset) => preset.id === id) ?? PRESETS[0];
+
+/** distance and polar angle (from straight up) of a preset's camera around its target */
+export function orbitOf(preset: Preset) {
+	const [px, py, pz] = preset.position;
+	const [tx, ty, tz] = preset.target;
+	const distance = Math.hypot(px - tx, py - ty, pz - tz);
+	return { distance, polar: Math.acos((py - ty) / distance) };
+}
 
 /** which preset shows a building */
 export const ROOM_PRESET: Record<RoomId, PresetId> = {

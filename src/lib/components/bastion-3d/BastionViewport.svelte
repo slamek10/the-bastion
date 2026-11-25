@@ -10,7 +10,7 @@
 	 */
 	import {
 		ACESFilmicToneMapping,
-		PCFSoftShadowMap,
+		PCFShadowMap,
 		PerspectiveCamera,
 		Raycaster,
 		SRGBColorSpace,
@@ -30,10 +30,14 @@
 	import { buildVisionTower } from './scene/visionTower';
 	import { buildAgents, AGENT_NAMES, MODE_COLOR, type AgentMode } from './agents/agent';
 	import { loadCharacterAssets } from './agents/characters';
+	import { loadKits } from './scene/kits';
+	import { createPicture } from './scene/effects';
+	import type { VillageModule } from './scene/village';
+	import { qualitySettings, rigFor, type LightMode } from '$lib/village/lighting';
 	import { Disposer } from './disposer';
 	import { damp, type FrameContext, type Pick, type SceneModule } from './scene/common';
 	import { projectToScreen } from './projection';
-	import { presetById, ROOM_PRESET } from './presets';
+	import { ORBIT, presetById, ROOM_PRESET } from './presets';
 	import { allOf } from '$lib/bindings';
 	import { AGENT_IDS, type AgentId } from '$lib/types';
 	import type { Bastion3DState } from '$lib/stores/bastion3d.svelte';
@@ -41,6 +45,7 @@
 	let { store, dev = false }: { store: Bastion3DState; dev?: boolean } = $props();
 
 	let host: HTMLDivElement;
+	let loading = $state('');
 	let canvas: HTMLCanvasElement;
 	const plates: Partial<Record<AgentId, HTMLDivElement>> = {};
 	let modes: Record<AgentId, AgentMode> = $state(
@@ -97,9 +102,11 @@
 	$effect(() => untrack(setup));
 
 	function setup() {
+		const settings = qualitySettings(store.quality);
 		const renderer = new WebGLRenderer({
 			canvas,
-			antialias: true,
+			// with the bloom picture, SMAA does the edges; on a high-DPI screen none is needed
+			antialias: !settings.bloom && (window.devicePixelRatio || 1) < 1.75,
 			powerPreference: 'high-performance'
 		});
 		renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -108,44 +115,70 @@
 		renderer.toneMappingExposure = 1.05;
 		// shadows from the sun only
 		renderer.shadowMap.enabled = true;
-		renderer.shadowMap.type = PCFSoftShadowMap;
+		renderer.shadowMap.type = PCFShadowMap;
+		// counted over a whole frame (the composer renders several passes)
+		renderer.info.autoReset = false;
 
 		const scene = new Scene();
-		const cam = new PerspectiveCamera(45, 1, 0.1, 400);
+		const cam = new PerspectiveCamera(42, 1, 0.3, 400);
 		const start = presetById(store.preset);
 		cam.position.set(...start.position);
 		const orbit = new OrbitControls(cam, renderer.domElement);
 		orbit.target.set(...start.target);
 		orbit.enableDamping = true;
 		orbit.dampingFactor = 0.08;
-		orbit.maxPolarAngle = Math.PI * 0.49;
-		orbit.minDistance = 3;
-		orbit.maxDistance = 110;
+		orbit.minPolarAngle = ORBIT.minPolar;
+		orbit.maxPolarAngle = ORBIT.maxPolar;
+		orbit.minDistance = ORBIT.minDistance;
+		orbit.maxDistance = ORBIT.maxDistance;
 		orbit.addEventListener('start', () => (tween = undefined));
+		// the look-at point stays over the village
+		orbit.addEventListener('change', () => {
+			const t = orbit.target;
+			const r = Math.hypot(t.x, t.z);
+			if (r > ORBIT.targetRadius)
+				t.set((t.x / r) * ORBIT.targetRadius, t.y, (t.z / r) * ORBIT.targetRadius);
+			if (t.y < 0) t.y = 0;
+		});
 		camera = cam;
 		controls = orbit;
 
-		const modules: SceneModule[] = [
-			buildVillage(scene),
-			buildTownHall(),
-			buildWatchForge(),
-			buildBoilerHouse(),
-			buildHomeCottage(),
-			buildVisionTower()
-		];
-		const agents = buildAgents();
-		for (const module of modules) scene.add(module.group);
-		scene.add(agents.group);
-
-		// the villagers' models: loaded after the village shows, then their portraits
+		const picture = createPicture(renderer, scene, cam, settings);
 		const models = new Disposer();
 		let closed = false;
-		loadCharacterAssets(models)
-			.then((assets) => {
+		let modules: SceneModule[] = [];
+		let village: VillageModule | undefined;
+		const agents = buildAgents();
+		scene.add(agents.group);
+
+		// the kits first (the buildings are made of them), the people after
+		loading = 'Building the village…';
+		loadKits(models)
+			.then((kits) => {
 				if (closed) return;
-				store.portraits = agents.attach(assets, renderer);
+				const assets = { kits, quality: settings };
+				village = buildVillage(scene, assets, store.light);
+				modules = [
+					village,
+					buildTownHall(assets),
+					buildWatchForge(assets),
+					buildBoilerHouse(assets),
+					buildHomeCottage(assets),
+					buildVisionTower(assets)
+				];
+				for (const module of modules) scene.add(module.group);
+				loading = '';
+				return loadCharacterAssets(models);
 			})
-			.catch((error) => console.warn('[3d] characters', error));
+			.then((assets) => {
+				if (closed || !assets) return;
+				store.portraits = agents.attach(assets, renderer);
+				(window as unknown as { __bastionReady?: boolean }).__bastionReady = true;
+			})
+			.catch((error) => {
+				console.warn('[3d] models', error);
+				loading = `Couldn't load the village: ${error?.message ?? error}`;
+			});
 
 		// size
 		const resize = () => {
@@ -154,6 +187,7 @@
 			renderer.setSize(w, h, false);
 			renderer.domElement.style.width = `${w}px`;
 			renderer.domElement.style.height = `${h}px`;
+			picture.setSize(w, h);
 			cam.aspect = w / h;
 			cam.updateProjectionMatrix();
 		};
@@ -187,15 +221,18 @@
 		let frame = 0;
 		let last = performance.now();
 		let time = 0;
-		let day = store.dayMode === 'day' ? 1 : 0;
-		const ctx: FrameContext = {
+		let glow = rigFor(store.light).glow;
+		let day = store.light === 'night' ? 0 : 1;
+		const ctx: FrameContext & { light: LightMode } = {
 			t: store.telemetry,
 			bindings: store.bindings,
 			time: 0,
 			day,
+			glow,
 			agentsBusy: false,
 			camera: cam.position,
-			openTownHall: false
+			openTownHall: false,
+			light: store.light
 		};
 		const loop = (now: number) => {
 			frame = requestAnimationFrame(loop);
@@ -203,11 +240,14 @@
 			const dt = Math.min(0.25, (now - last) / 1000);
 			last = now;
 			time += dt;
-			day = damp(day, store.dayMode === 'day' ? 1 : 0, 3, dt);
+			glow = damp(glow, rigFor(store.light).glow, 2.5, dt);
+			day = damp(day, store.light === 'night' ? 0 : 1, 2.5, dt);
 			ctx.t = store.telemetry;
 			ctx.bindings = store.bindings;
 			ctx.time = time;
 			ctx.day = day;
+			ctx.glow = glow;
+			ctx.light = store.light;
 			ctx.agentsBusy = AGENT_IDS.some((id) => ctx.t.agents[id]?.busy);
 			ctx.openTownHall = store.preset === 'townhall' || store.meeting.active;
 
@@ -221,22 +261,40 @@
 			orbit.update();
 			for (const module of modules) module.update(dt, ctx);
 			agents.update(dt, ctx, store.meeting.active);
-			renderer.render(scene, cam);
+			if (village) renderer.toneMappingExposure = village.exposure;
+			picture.setBloom(0.3 + glow * 0.5);
+			renderer.info.reset();
+			picture.render();
+			frames++;
 
-			// nameplates
+			// nameplates: just above the head, fading with distance
 			const w = host.clientWidth;
 			const h = host.clientHeight;
 			for (const [id, actor] of agents.actors) {
 				const plate = plates[id];
 				if (!plate) continue;
 				const point = projectToScreen(actor.anchor, cam, w, h, 40);
-				if (point.visible) {
+				const distance = cam.position.distanceTo(actor.anchor);
+				const opacity = Math.max(0, Math.min(1, (60 - distance) / 25));
+				if (point.visible && opacity > 0.02) {
 					plate.style.display = '';
+					plate.style.opacity = String(opacity);
 					plate.style.transform = `translate(-50%, -100%) translate(${point.x}px, ${point.y}px)`;
 				} else plate.style.display = 'none';
 				if (modes[id] !== actor.mode) modes[id] = actor.mode;
 			}
 		};
+		// frames counted, for the performance check (window.__bastionFps)
+		let frames = 0;
+		const fpsTimer = setInterval(() => {
+			const w = window as unknown as { __bastionFps?: number; __bastionRender?: object };
+			w.__bastionFps = frames;
+			w.__bastionRender = {
+				calls: renderer.info.render.calls,
+				triangles: renderer.info.render.triangles
+			};
+			frames = 0;
+		}, 1000);
 		const onVisibility = () => {
 			cancelAnimationFrame(frame);
 			if (!document.hidden) {
@@ -249,12 +307,14 @@
 		// the leak check: after the first frames, and again at dispose (it must go back to 0)
 		const memoryLog = setTimeout(
 			() => dev && console.debug(`[3d] in use ${JSON.stringify(renderer.info.memory)}`),
-			500
+			4000
 		);
 
 		return () => {
 			cancelAnimationFrame(frame);
 			clearTimeout(memoryLog);
+			clearInterval(fpsTimer);
+			(window as unknown as { __bastionReady?: boolean }).__bastionReady = false;
 			document.removeEventListener('visibilitychange', onVisibility);
 			observer.disconnect();
 			renderer.domElement.removeEventListener('pointerdown', onDown);
@@ -264,6 +324,7 @@
 			for (const module of modules) module.dispose();
 			agents.dispose();
 			models.dispose();
+			picture.dispose();
 			scene.clear();
 			orbit.dispose();
 			renderer.renderLists.dispose();
@@ -284,6 +345,7 @@
 
 <div class="viewport" bind:this={host}>
 	<canvas bind:this={canvas}></canvas>
+	{#if loading}<div class="loading">{loading}</div>{/if}
 	{#each AGENT_IDS as id (id)}
 		{@const mode = modes[id]}
 		{@const agent = store.telemetry.agents[id]}
@@ -321,6 +383,16 @@
 		touch-action: none;
 	}
 
+	.loading {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: rgba(255, 255, 255, 0.75);
+		pointer-events: none;
+	}
+
 	.plate {
 		position: absolute;
 		left: 0;
@@ -338,14 +410,14 @@
 		display: flex;
 		align-items: center;
 		gap: 0.4rem;
-		padding: 0.22rem 0.6rem;
+		padding: 0.12rem 0.45rem;
 		border-radius: 999px;
 		border: 1px solid color-mix(in srgb, var(--mode) 55%, transparent);
 		background: rgba(8, 12, 28, 0.62);
 		backdrop-filter: blur(10px);
 		color: white;
 		font: inherit;
-		font-size: 0.72rem;
+		font-size: 0.64rem;
 		white-space: nowrap;
 		cursor: pointer;
 	}
@@ -355,8 +427,8 @@
 	}
 
 	.face {
-		width: 1.6rem;
-		height: 1.6rem;
+		width: 1.2rem;
+		height: 1.2rem;
 		margin: -0.15rem 0 -0.15rem -0.4rem;
 		border-radius: 50%;
 		background: color-mix(in srgb, var(--mode) 35%, #1e293b);

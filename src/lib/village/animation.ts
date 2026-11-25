@@ -50,4 +50,5 @@ export function animationFor(pose: Pose): Clip {
 }
 
 /** walking and running speeds (m/s), matched to the clips' strides */
-export const SPEED = { walk: 1.25, jog: 2.6, run: 3.4 };
+// the people are 1.4× life size (PEOPLE_SCALE): their strides are longer
+export const SPEED = { walk: 1.7, jog: 3.4, run: 4.6 };

@@ -16,6 +16,7 @@ function village() {
 		bindings: emptyBindings(),
 		time: 0,
 		day: 1,
+		glow: 0,
 		agentsBusy: false,
 		camera: { x: 0, y: 30, z: 30 },
 		openTownHall: true

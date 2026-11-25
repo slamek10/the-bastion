@@ -59,7 +59,7 @@
 	>
 		<header>
 			<Icon icon="mdi:link-variant" height="1.2rem" />
-			<h3>Bindings</h3>
+			<h3>Settings</h3>
 			<span class="dim small">
 				{store.mode === 'demo' ? 'demo: not saved to the server' : 'data/bindings.json'}
 			</span>
@@ -67,6 +67,21 @@
 				<Icon icon="mdi:close" height="1.1rem" />
 			</button>
 		</header>
+		<div class="quality">
+			<span>Quality</span>
+			<div class="seg">
+				<button aria-pressed={store.quality === 'high'} onclick={() => store.setQuality('high')}>
+					High
+				</button>
+				<button aria-pressed={store.quality === 'low'} onclick={() => store.setQuality('low')}>
+					Low
+				</button>
+			</div>
+			<span class="dim small">
+				Low: no bloom, softer shadows, half the trees and flowers. Kept in this browser.
+			</span>
+		</div>
+		<h4>Bindings</h4>
 		<div class="rooms">
 			{#each ROOM_IDS as id (id)}
 				<button class:active={room === id} onclick={() => (room = id)}>
@@ -177,6 +192,21 @@
 
 	footer {
 		justify-content: flex-end;
+	}
+
+	.quality {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		flex-wrap: wrap;
+	}
+
+	.seg {
+		display: inline-flex;
+		gap: 0.2rem;
+		padding: 0.15rem;
+		border-radius: 0.8rem;
+		background: rgba(0, 0, 0, 0.25);
 	}
 
 	.rooms {

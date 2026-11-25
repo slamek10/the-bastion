@@ -1,117 +1,142 @@
 /**
  * The boiler house (bastion-heat): a brick bathhouse with a chimney that
- * smokes while the heating runs, copper pipes on its front going from blue
- * to glowing orange, and a thermostat sign from the first climate.* bound
- * to it.
+ * smokes and a vent that puffs steam while the heating runs, copper pipes on
+ * its front going from cool blue to glowing orange, and a pressure-gauge sign
+ * with the thermostat from the first climate.* bound to it.
  */
+import { BufferAttribute, BufferGeometry, Color, Points, PointsMaterial } from 'three';
 import {
-	AdditiveBlending,
-	BufferAttribute,
-	BufferGeometry,
-	Color,
-	NormalBlending,
-	PointLight,
-	Points,
-	PointsMaterial
-} from 'three';
-import { Kit, damp, hipRoof, placeBuilding, setPick, walls, type SceneModule } from './common';
+	glowOnly,
+	Kit,
+	damp,
+	placeBuilding,
+	setPick,
+	type BuildAssets,
+	type SceneModule
+} from './common';
+import { buildHouse, finishHouse, mergeStatic } from './buildingKit';
 import { BUILDINGS } from '$lib/village/layout';
 import { firstOf } from '$lib/bindings';
 
-const COLD = new Color(0x4f86c6);
+const COLD = new Color(0x7fa3c4);
 const HOT = new Color(0xf97316);
-const SMOKE = 70;
-const H = 3.2;
+const COPPER = new Color(0xb87333);
 
-export function buildBoilerHouse(): SceneModule {
+/** a puff column: particles rising from a point and spreading */
+function puffs(kit: Kit, count: number, size: number, color: number) {
+	const positions = new Float32Array(count * 3);
+	const ages = new Float32Array(count).map((_, i) => i / count);
+	const geometry = kit.geo(new BufferGeometry());
+	geometry.setAttribute('position', new BufferAttribute(positions, 3));
+	const material = kit.d.track(
+		new PointsMaterial({ color, size, transparent: true, opacity: 0, depthWrite: false })
+	);
+	const points = new Points(geometry, material);
+	points.frustumCulled = false;
+	return {
+		points,
+		material,
+		update(
+			dt: number,
+			from: [number, number, number],
+			rise: number,
+			spread: number,
+			speed: number
+		) {
+			for (let i = 0; i < count; i++) {
+				ages[i] = (ages[i] + dt * speed) % 1;
+				const age = ages[i];
+				positions[i * 3] = from[0] + Math.sin(age * 6 + i) * age * spread + age * spread;
+				positions[i * 3 + 1] = from[1] + age * rise;
+				positions[i * 3 + 2] = from[2] + Math.cos(age * 5 + i) * age * spread;
+			}
+			geometry.attributes.position.needsUpdate = true;
+		}
+	};
+}
+
+export function buildBoilerHouse({ kits }: BuildAssets): SceneModule {
 	const kit = new Kit();
 	const b = BUILDINGS.boiler;
 	const { group, w, d } = placeBuilding(kit, b);
 
-	const brick = kit.mat(0xb5654a, { roughness: 1 });
-	const floor = kit.box(w, 0.1, d, kit.mat(0x6b5b4b), 0, -0.06, 0);
-	floor.receiveShadow = true;
-	group.add(floor);
-	group.add(walls(kit, w, d, H, brick, 1.5).group);
-	group.add(hipRoof(kit, w, d, 2.2, kit.mat(0x5b3a2a, { flatShading: true }), H));
-	// a warm window either side of the door
-	const windowMat = kit.mat(0xffc98a, { emissive: 0xff8a2a, emissiveIntensity: 0.2 });
-	for (const x of [-2, 2]) {
-		const pane = kit.plane(1, 1, windowMat);
-		pane.position.set(x, 1.8, d / 2 + 0.01);
-		group.add(pane);
-	}
+	const house = buildHouse(kits.village, kits.nature, kit, {
+		w,
+		d,
+		style: 'brick',
+		roof: 'Roof_RoundTiles_6x6',
+		gable: 'Roof_Front_Brick6',
+		chimney: [1.6, -1.2],
+		windows: { front: true, back: false, sides: true },
+		vines: true
+	});
+	finishHouse(house, kit);
+	group.add(house.group);
 
-	// the chimney and its smoke
-	const chimney = kit.box(0.9, 3, 0.9, brick, w / 2 - 1.3, H, -d / 2 + 1.3);
-	chimney.castShadow = true;
-	group.add(chimney);
-	const top = { x: w / 2 - 1.3, y: H + 3.1, z: -d / 2 + 1.3 };
-	const positions = new Float32Array(SMOKE * 3);
-	const ages = new Float32Array(SMOKE);
-	for (let i = 0; i < SMOKE; i++) {
-		ages[i] = i / SMOKE;
-		positions[i * 3] = top.x;
-		positions[i * 3 + 1] = top.y + ages[i] * 4;
-		positions[i * 3 + 2] = top.z;
-	}
-	const smokeGeo = kit.geo(new BufferGeometry());
-	smokeGeo.setAttribute('position', new BufferAttribute(positions, 3));
-	const smokeMat = kit.d.track(
-		new PointsMaterial({
-			color: 0xdedede,
-			size: 0.7,
-			transparent: true,
-			opacity: 0,
-			depthWrite: false,
-			blending: NormalBlending
-		})
+	// smoke from the chimney, steam from a vent pipe on the side
+	const chimneyTop: [number, number, number] = [1.6, house.height + 4, -1.2];
+	const smoke = puffs(kit, 60, 0.9, 0xd8d4cc);
+	group.add(smoke.points);
+	const ventX = -w / 2 - 0.25;
+	const vent = kit.cylinder(
+		0.12,
+		0.12,
+		1.2,
+		kit.mat(0x9c6a3c, { metalness: 0.8, roughness: 0.35 }),
+		10
 	);
-	group.add(new Points(smokeGeo, smokeMat));
+	vent.position.set(ventX, house.height - 0.2, 1);
+	group.add(vent);
+	const steam = puffs(kit, 30, 0.5, 0xffffff);
+	group.add(steam.points);
 
 	// copper pipes on the front, either side of the door
-	const pipeMat = kit.mat(0x4f86c6, { metalness: 0.8, roughness: 0.3, emissive: 0x000000 });
-	for (const x of [-1.2, -3, 1.2, 3]) {
-		const riser = kit.cylinder(0.07, 0.07, 2.6, pipeMat, 8);
-		riser.position.set(x * 0.9, 1.3, d / 2 + 0.12);
+	const pipeMat = kit.mat(0xb87333, { metalness: 0.85, roughness: 0.3, emissive: 0x000000 });
+	for (const x of [-2.3, -1.6, 1.6, 2.3]) {
+		const riser = kit.cylinder(0.07, 0.07, 2.4, pipeMat, 10);
+		riser.position.set(x, 1.4, d / 2 + 0.2);
+		riser.castShadow = true;
 		group.add(riser);
 	}
 	for (const side of [-1, 1]) {
-		const header = kit.cylinder(0.07, 0.07, 2.4, pipeMat, 8);
+		const header = kit.cylinder(0.07, 0.07, 0.9, pipeMat, 10);
 		header.rotation.z = Math.PI / 2;
-		header.position.set(side * 1.9, 2.6, d / 2 + 0.12);
+		header.position.set(side * 1.95, 2.6, d / 2 + 0.2);
 		group.add(header);
+		const valve = kit.cylinder(0.12, 0.12, 0.06, kit.mat(0xb91c1c), 12);
+		valve.rotation.x = Math.PI / 2;
+		valve.position.set(side * 1.95, 1.2, d / 2 + 0.3);
+		group.add(valve);
 	}
-	const sparks = new Float32Array(40 * 3);
-	for (let i = 0; i < 40; i++) {
-		sparks[i * 3] = (Math.random() - 0.5) * 5;
-		sparks[i * 3 + 1] = Math.random() * 2.6;
-		sparks[i * 3 + 2] = d / 2 + 0.2;
-	}
-	const sparkGeo = kit.geo(new BufferGeometry());
-	sparkGeo.setAttribute('position', new BufferAttribute(sparks, 3));
-	const sparkMat = kit.d.track(
-		new PointsMaterial({
-			color: 0xffa14a,
-			size: 0.12,
-			transparent: true,
-			opacity: 0,
-			blending: AdditiveBlending,
-			depthWrite: false
-		})
-	);
-	group.add(new Points(sparkGeo, sparkMat));
-	const glow = new PointLight(0xf97316, 0, 7, 1.5);
-	glow.position.set(0, 1.6, d / 2 + 1);
-	group.add(glow);
+	const glow = glowOnly(0xf97316);
 
-	// the thermostat sign by the door
+	// the pressure-gauge sign by the door
 	const sign = kit.canvas(320, 320);
 	const signMesh = kit.screen(sign, 1, 1);
-	signMesh.position.set(w / 2 - 0.6, 1.6, d / 2 + 0.8);
+	signMesh.position.set(w / 2 + 0.5, 1.7, d / 2 + 0.6);
 	group.add(signMesh);
-	group.add(kit.box(0.1, 1.1, 0.1, kit.mat(0x6b4426), w / 2 - 0.6, 0, d / 2 + 0.75));
+	group.add(kit.box(0.1, 1.2, 0.1, kit.mat(0x6b4426), w / 2 + 0.5, 0, d / 2 + 0.55));
+	// a woodpile by the side
+	for (let i = 0; i < 9; i++) {
+		const log = kit.cylinder(
+			0.12,
+			0.12,
+			1,
+			kits.village.material('MI_WoodTrim') ?? kit.mat(0x7a5233),
+			8
+		);
+		log.rotation.x = Math.PI / 2;
+		log.position.set(
+			w / 2 + 0.4 + (i % 3) * 0.25 - (Math.floor(i / 3) % 2) * 0.12,
+			0.12 + Math.floor(i / 3) * 0.22,
+			-1
+		);
+		log.castShadow = true;
+		group.add(log);
+	}
 	setPick(group, { kind: 'room', id: 'boiler' });
+
+	mergeStatic(group, kit);
 
 	let heat = 0;
 	let redraw = 0;
@@ -123,29 +148,22 @@ export function buildBoilerHouse(): SceneModule {
 			const climate = climateId ? ctx.t.ha[climateId] : undefined;
 			const heating = ctx.t.heat.active || climate?.attributes.hvac_action === 'heating';
 			heat = damp(heat, heating ? 1 : 0, 1.2, dt);
-			color.copy(COLD).lerp(HOT, heat);
+			color
+				.copy(COPPER)
+				.lerp(COLD, (1 - heat) * 0.5)
+				.lerp(HOT, heat * 0.7);
 			pipeMat.color.copy(color);
-			pipeMat.emissive.copy(color).multiplyScalar(heat * 0.7);
-			windowMat.emissiveIntensity = 0.2 + heat * 1.4 + (1 - ctx.day) * 0.4;
-			glow.intensity = heat * 6;
-			sparkMat.opacity = heat * 0.9;
-			smokeMat.opacity = heat * 0.55;
+			pipeMat.emissive.copy(HOT).multiplyScalar(heat * 0.8);
+			glow.intensity = heat * 8;
+			smoke.material.opacity = heat * 0.5;
+			steam.material.opacity = heat * 0.6;
 			if (heat > 0.02) {
-				for (let i = 0; i < SMOKE; i++) {
-					ages[i] = (ages[i] + dt * 0.18) % 1;
-					const age = ages[i];
-					positions[i * 3] = top.x + Math.sin(age * 6 + i) * age * 0.6 + age * 1.2;
-					positions[i * 3 + 1] = top.y + age * 4.5;
-					positions[i * 3 + 2] = top.z + Math.cos(age * 5 + i) * age * 0.6;
-				}
-				smokeGeo.attributes.position.needsUpdate = true;
-				for (let i = 0; i < 40; i++) {
-					let y = sparks[i * 3 + 1] + dt * (0.6 + heat);
-					if (y > 2.7) y = 0.1;
-					sparks[i * 3 + 1] = y;
-				}
-				sparkGeo.attributes.position.needsUpdate = true;
+				smoke.update(dt, chimneyTop, 5, 0.8, 0.16);
+				steam.update(dt, [ventX, house.height + 0.4, 1], 1.8, 0.3, 0.5);
 			}
+			for (const glass of house.glass) glass.emissiveIntensity = 0.15 + heat * 0.9 + ctx.glow * 1.1;
+			house.doorLamp.intensity = ctx.glow * 6;
+			house.doorLampGlow.emissiveIntensity = ctx.glow * 3;
 
 			redraw -= dt;
 			if (redraw <= 0) {
@@ -153,13 +171,18 @@ export function buildBoilerHouse(): SceneModule {
 				const { ctx: c, width } = sign;
 				c.fillStyle = '#2b1d14';
 				c.fillRect(0, 0, width, width);
-				c.strokeStyle = heating ? '#f97316' : '#4f86c6';
+				c.strokeStyle = '#b87333';
+				c.lineWidth = 10;
+				c.beginPath();
+				c.arc(160, 165, 130, 0, Math.PI * 2);
+				c.stroke();
+				c.strokeStyle = heating ? '#f97316' : '#7fa3c4';
 				c.lineWidth = 14;
 				c.beginPath();
 				c.arc(
 					160,
 					165,
-					120,
+					110,
 					Math.PI * 0.75,
 					Math.PI * 0.75 + Math.PI * 1.5 * (heating ? 0.8 : 0.4)
 				);
@@ -168,19 +191,17 @@ export function buildBoilerHouse(): SceneModule {
 				c.fillStyle = '#fef3c7';
 				const current = climate?.attributes.current_temperature;
 				const target = climate?.attributes.temperature;
-				c.font = '600 64px ui-sans-serif, system-ui';
+				c.font = '600 60px ui-sans-serif, system-ui';
 				c.fillText(typeof current === 'number' ? `${current.toFixed(1)}°` : '--.-°', 160, 180);
-				c.font = '24px ui-sans-serif, system-ui';
+				c.font = '22px ui-sans-serif, system-ui';
 				c.fillStyle = '#d6c4a8';
 				c.fillText(
-					climate
-						? `target ${typeof target === 'number' ? target : '–'}° · ${climate.state}`
-						: 'no climate bound',
+					climate ? `target ${typeof target === 'number' ? target : '–'}°` : 'no climate bound',
 					160,
-					225
+					222
 				);
 				c.fillStyle = heating ? '#fb923c' : '#93c5fd';
-				c.fillText(heating ? 'HEATING' : 'IDLE', 160, 262);
+				c.fillText(heating ? 'HEATING' : 'IDLE', 160, 256);
 				c.textAlign = 'start';
 				sign.refresh();
 			}

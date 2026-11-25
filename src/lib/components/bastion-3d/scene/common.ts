@@ -29,8 +29,10 @@ export interface FrameContext {
 	bindings: Bindings;
 	/** seconds since the scene started */
 	time: number;
-	/** 0 twilight … 1 day, eased */
+	/** 0 night … 1 day, eased */
 	day: number;
+	/** lamps, windows, the core: 0 off (day) … 1 fully lit (night), eased */
+	glow: number;
 	/** any agent turn runs */
 	agentsBusy: boolean;
 	/** where the camera is, for the town hall's fading roof */
@@ -41,6 +43,12 @@ export interface FrameContext {
 
 export type Pick =
 	{ kind: 'room'; id: RoomId } | { kind: 'agent'; id: AgentId } | { kind: 'camera'; room: RoomId };
+
+/** what every builder gets: the kits, the quality, and shared materials */
+export interface BuildAssets {
+	kits: import('./kits').Kits;
+	quality: import('$lib/village/lighting').QualitySettings;
+}
 
 export interface SceneModule {
 	group: Group;
@@ -253,4 +261,14 @@ export function walls(kit: Kit, w: number, d: number, h: number, material: Mater
 		group.add(mesh);
 	}
 	return { group, front };
+}
+
+/**
+ * Stands in for a point light where a glow is enough (windows, door lamps):
+ * every real light costs every lit pixel of the village, so only a few are
+ * real (the lamps near the camera, the hall, the core, the lantern, the pool,
+ * the alarm strobe). Same fields, nothing drawn.
+ */
+export function glowOnly(color = 0xffffff) {
+	return { intensity: 0, color: new Color(color), position: { set: (..._xyz: number[]) => {} } };
 }

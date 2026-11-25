@@ -7,6 +7,14 @@
 import { applyMessage, emptyTelemetry, pushEvent } from '$lib/telemetry';
 import { DemoSimulator, DEMO_BINDINGS, type DemoTrigger } from '$lib/demo';
 import { emptyBindings } from '$lib/bindings';
+import {
+	loadLightMode,
+	loadQuality,
+	saveLightMode,
+	saveQuality,
+	type LightMode,
+	type Quality
+} from '$lib/village/lighting';
 import type { PresetId } from '$lib/components/bastion-3d/presets';
 import {
 	AGENT_IDS,
@@ -42,7 +50,14 @@ export class Bastion3DState {
 	telemetry: Telemetry = $state.raw(emptyTelemetry());
 	events: FeedEvent[] = $state.raw([]);
 	mode: 'live' | 'demo' = $state('live');
-	dayMode: 'twilight' | 'day' = $state('twilight');
+	/** Golden hour (default), Day or Night; remembered in this browser */
+	light: LightMode = $state(
+		loadLightMode(typeof localStorage === 'undefined' ? undefined : localStorage)
+	);
+	/** High (bloom, 2048 shadows, all scenery) or Low; remembered in this browser */
+	quality: Quality = $state(
+		loadQuality(typeof localStorage === 'undefined' ? undefined : localStorage)
+	);
 	selection: Selection | null = $state(null);
 	preset: PresetId = $state('overview');
 	/** bumps when the same preset is asked for again, so the camera flies back */
@@ -171,6 +186,16 @@ export class Bastion3DState {
 			if (!remember()) setTimeout(remember, 1500);
 		}
 		return result;
+	}
+
+	setLight(mode: LightMode) {
+		this.light = mode;
+		saveLightMode(mode, typeof localStorage === 'undefined' ? undefined : localStorage);
+	}
+
+	setQuality(quality: Quality) {
+		this.quality = quality;
+		saveQuality(quality, typeof localStorage === 'undefined' ? undefined : localStorage);
 	}
 
 	select(selection: Selection | null) {

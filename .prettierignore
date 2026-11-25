@@ -6,3 +6,6 @@ pnpm-lock.yaml
 
 # local runtime data, never in git
 data
+
+# local screenshots
+.screenshots

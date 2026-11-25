@@ -27,13 +27,14 @@ export interface Building extends Rect {
 	work: string;
 }
 
+/** footprints on the building kit's 2 m grid (the tower is round) */
 export const BUILDINGS: Record<BuildingId, Building> = {
 	townhall: {
 		id: 'townhall',
 		x: 0,
-		z: -18,
-		w: 12,
-		d: 10,
+		z: -18.2,
+		w: 8,
+		d: 12,
 		facing: 's',
 		door: 'th_door',
 		work: 'th_in'
@@ -42,8 +43,8 @@ export const BUILDINGS: Record<BuildingId, Building> = {
 		id: 'forge',
 		x: -20,
 		z: -14,
-		w: 9,
-		d: 7,
+		w: 8,
+		d: 8,
 		facing: 's',
 		door: 'forge_door',
 		work: 'forge_door'
@@ -52,8 +53,8 @@ export const BUILDINGS: Record<BuildingId, Building> = {
 		id: 'boiler',
 		x: -21,
 		z: 10,
-		w: 7,
-		d: 7,
+		w: 6,
+		d: 6,
 		facing: 'e',
 		door: 'boiler_door',
 		work: 'boiler_door'
@@ -62,8 +63,8 @@ export const BUILDINGS: Record<BuildingId, Building> = {
 		id: 'cottage',
 		x: -4,
 		z: 22,
-		w: 8,
-		d: 7,
+		w: 6,
+		d: 8,
 		facing: 'n',
 		door: 'cottage_door',
 		work: 'cottage_door'
@@ -72,8 +73,8 @@ export const BUILDINGS: Record<BuildingId, Building> = {
 		id: 'tower',
 		x: 21,
 		z: -8,
-		w: 4,
-		d: 4,
+		w: 5,
+		d: 5,
 		facing: 'w',
 		door: 'tower_door',
 		work: 'tower_door'
@@ -143,7 +144,7 @@ link(ring[2], node('meet_b', 1, 5.2));
 link(
 	ring[6],
 	node('n1', 0, -8),
-	node('th_door', 0, -12),
+	node('th_door', 0, -11.3),
 	node('th_in', 0, -14.6, { inside: 'townhall' })
 );
 const tableRing = Array.from({ length: 8 }, (_, k) => {

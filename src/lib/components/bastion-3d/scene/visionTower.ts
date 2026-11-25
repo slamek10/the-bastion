@@ -4,7 +4,14 @@
  * board by the door, and the pond's lit swimming area (the pond's first
  * bound light.*). The tower, its lantern and the board open the cameras.
  */
-import { Group, Mesh, PointLight, SphereGeometry } from 'three';
+import {
+	Group,
+	Mesh,
+	MeshStandardMaterial,
+	PointLight,
+	RepeatWrapping,
+	SphereGeometry
+} from 'three';
 import {
 	Kit,
 	damp,
@@ -12,9 +19,11 @@ import {
 	lightOf,
 	placeBuilding,
 	setPick,
+	type BuildAssets,
 	type CanvasScreen,
 	type SceneModule
 } from './common';
+import { mergeStatic } from './buildingKit';
 import { BUILDINGS, SWIM } from '$lib/village/layout';
 import { allOf, firstOf } from '$lib/bindings';
 import type { CamEvent } from '$lib/types';
@@ -63,40 +72,59 @@ function drawRadar(screen: CanvasScreen, angle: number, label: string, blip?: nu
 	screen.refresh();
 }
 
-export function buildVisionTower(): SceneModule {
+export function buildVisionTower({ kits }: BuildAssets): SceneModule {
 	const kit = new Kit();
 	const b = BUILDINGS.tower;
 	const { group, d } = placeBuilding(kit, b);
 	const outer = kit.group('visionTower');
 	outer.add(group);
 
-	const stone = kit.mat(0x9b958a, { roughness: 1, flatShading: true });
-	const body = kit.cylinder(1.7, 1.95, 8, stone, 10);
-	body.position.y = 4;
-	group.add(body);
-	for (let i = 0; i < 10; i++) {
-		const a = (i / 10) * Math.PI * 2;
-		const merlon = kit.box(0.5, 0.6, 0.35, stone, Math.cos(a) * 1.75, 8, Math.sin(a) * 1.75);
-		merlon.rotation.y = -a;
-		group.add(merlon);
+	// a round stone tower in the kit's rock, its texture repeated around
+	const rock = kits.village.material('MI_RockTrim') as MeshStandardMaterial | undefined;
+	const stone = kit.d.track(rock ? rock.clone() : kit.mat(0x9b958a));
+	if (stone.map) {
+		stone.map = kit.d.track(stone.map.clone());
+		stone.map.wrapS = stone.map.wrapT = RepeatWrapping;
+		stone.map.repeat.set(5, 3);
 	}
-	group.add(kit.box(1, 2, 0.1, kit.mat(0x5b3a24), 0, 0, 1.9));
-	for (const y of [3.5, 6]) {
-		const slit = kit.plane(
-			0.3,
-			0.9,
-			kit.mat(0x1d2430, { emissive: 0xffc56b, emissiveIntensity: 0.3 })
-		);
-		slit.position.set(0, y, 1.92);
+	if (stone.normalMap) {
+		stone.normalMap = kit.d.track(stone.normalMap.clone());
+		stone.normalMap.wrapS = stone.normalMap.wrapT = RepeatWrapping;
+		stone.normalMap.repeat.set(5, 3);
+	}
+	const H = 7.4;
+	const body = kit.cylinder(2.05, 2.3, H, stone, 24);
+	body.position.y = H / 2;
+	body.castShadow = true;
+	body.receiveShadow = true;
+	group.add(body);
+	const ledge = kit.cylinder(2.45, 2.45, 0.3, stone, 24);
+	ledge.position.y = H;
+	group.add(ledge);
+	// the conical tiled roof
+	group.add(kits.village.clone('Roof_Tower_RoundTiles', 0, H + 0.15, 0, 0, 0.88));
+	// a door, a window slit glowing, steps
+	group.add(kits.village.clone('DoorFrame_Round_WoodDark', 0, 0, 2.05, 0, 0.85));
+	group.add(kits.village.clone('Door_1_Round', -0.45, 0, 2.05, 0, 0.85));
+	const slitMat = kit.mat(0x1d2430, { emissive: 0xffc56b, emissiveIntensity: 0.3 });
+	for (const [y, a] of [
+		[3.6, 0.5],
+		[5.6, -0.7],
+		[5.2, 2.4]
+	]) {
+		const slit = kit.plane(0.3, 0.9, slitMat);
+		slit.position.set(Math.sin(a) * 2.2, y, Math.cos(a) * 2.2);
+		slit.rotation.y = a;
 		group.add(slit);
 	}
-	group.traverse((child) => {
-		if ((child as Mesh).isMesh) child.castShadow = true;
-	});
+	group.add(kits.village.clone('Stairs_Exterior_Straight', 0, -0.75, d / 2 + 0.8));
+	group.add(kits.nature.clone('Rock_Medium_2', 2.6, 0, 1.2, 0.4, 0.8));
+	group.add(kits.nature.clone('Fern_1', -2.4, 0, 1.4, 0, 1));
 
 	// the camera-lantern on top
 	const head = new Group();
-	head.position.set(0, 8.9, 0);
+	// on the roof's peak
+	head.position.set(0, H + 6.4, 0);
 	const housing = kit.box(0.5, 0.45, 0.9, kit.mat(0xf8fafc, { roughness: 0.4 }), 0, -0.22, 0.1);
 	head.add(housing);
 	const lensMat = kit.glow(0x60a5fa, 1.8);
@@ -108,7 +136,7 @@ export function buildVisionTower(): SceneModule {
 	lanternLight.position.set(0, 0, 0.8);
 	head.add(lanternLight);
 	group.add(head);
-	group.add(kit.cylinder(0.08, 0.08, 0.6, kit.mat(0x2f3338), 8).translateY(8.4));
+
 	setPick(head, { kind: 'camera', room: 'tower' });
 
 	// the radar board by the door
@@ -119,7 +147,8 @@ export function buildVisionTower(): SceneModule {
 	group.add(board);
 	group.add(kit.box(0.1, 1.15, 0.1, kit.mat(0x6b4426), 1.6, 0, d / 2 + 0.85));
 	setPick(board, { kind: 'camera', room: 'tower' });
-	setPick(body, { kind: 'camera', room: 'tower' });
+	setPick(group, { kind: 'camera', room: 'tower' });
+	setPick(board, { kind: 'camera', room: 'tower' });
 
 	// the swimming area: a pale floor under the water, buoys, a light
 	const swimMat = kit.mat(0x9fe6ff, {
@@ -161,6 +190,8 @@ export function buildVisionTower(): SceneModule {
 	poolLight.position.set(SWIM.x, 0.8, SWIM.z);
 	outer.add(poolLight);
 
+	mergeStatic(outer, kit, new Set([head]));
+
 	let sweep = 0;
 	let yaw = 0;
 	let redraw = 0;
@@ -175,7 +206,7 @@ export function buildVisionTower(): SceneModule {
 			}
 			swimMat.emissiveIntensity = damp(
 				swimMat.emissiveIntensity,
-				pool ? 0.5 + pool.level + Math.sin(ctx.time * 2) * 0.08 : 0.08,
+				pool ? 0.15 + pool.level * 0.45 + Math.sin(ctx.time * 2) * 0.04 : 0.05,
 				4,
 				dt
 			);
@@ -193,7 +224,8 @@ export function buildVisionTower(): SceneModule {
 			lensMat.color.setHex(locked ? 0xf87171 : 0x60a5fa);
 			lensMat.emissive.setHex(locked ? 0xef4444 : 0x3b82f6);
 			lanternLight.color.setHex(locked ? 0xef4444 : 0x60a5fa);
-			lanternLight.intensity = 2 + (1 - ctx.day) * 4;
+			lanternLight.intensity = 2 + ctx.glow * 5;
+			slitMat.emissiveIntensity = 0.2 + ctx.glow * 2;
 
 			redraw -= dt;
 			if (redraw <= 0) {
