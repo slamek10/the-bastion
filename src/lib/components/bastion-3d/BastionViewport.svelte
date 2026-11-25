@@ -199,7 +199,8 @@
 		};
 		const loop = (now: number) => {
 			frame = requestAnimationFrame(loop);
-			const dt = Math.min(0.1, (now - last) / 1000);
+			// capped, so a slow or throttled frame doesn't jump the walkers far
+			const dt = Math.min(0.25, (now - last) / 1000);
 			last = now;
 			time += dt;
 			day = damp(day, store.dayMode === 'day' ? 1 : 0, 3, dt);

@@ -230,7 +230,10 @@ export class AgentActor {
 			const dx = next.x - pos.x;
 			const dz = next.z - pos.z;
 			const distance = Math.hypot(dx, dz);
-			const speed = this.mode === 'ALERT' ? SPEED.run : SPEED.walk;
+			// an alert runs; a meeting is called: hurry over at a jog
+			const hurry = this.mode === 'ALERT' || this.mode === 'MEETING';
+			const speed =
+				this.mode === 'ALERT' ? SPEED.run : this.mode === 'MEETING' ? SPEED.jog : SPEED.walk;
 			if (distance < 0.05) {
 				this.path.shift();
 				if (!this.path.length && this.mode === 'IDLE') {
@@ -242,7 +245,7 @@ export class AgentActor {
 				pos.x += (dx / distance) * step;
 				pos.z += (dz / distance) * step;
 				this.turnTo(Math.atan2(dx, dz), dt, 10);
-				this.moving = this.mode === 'ALERT' ? 'run' : 'walk';
+				this.moving = hurry ? 'run' : 'walk';
 			}
 		} else if (this.mode === 'IDLE') {
 			this.linger -= dt;

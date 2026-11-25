@@ -50,4 +50,4 @@ export function animationFor(pose: Pose): Clip {
 }
 
 /** walking and running speeds (m/s), matched to the clips' strides */
-export const SPEED = { walk: 1.25, run: 3.4 };
+export const SPEED = { walk: 1.25, jog: 2.6, run: 3.4 };

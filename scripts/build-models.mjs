@@ -24,15 +24,50 @@ mkdirSync(out, { recursive: true });
 const tmp = mkdtempSync(join(tmpdir(), 'bastion-models-'));
 
 const BASE = join(source, 'Universal Base Characters[Standard]', 'Base Characters');
-const HAIR = join(source, 'Universal Base Characters[Standard]', 'Hairstyles', 'Rigged to Head Bone', 'glTF (Godot -Unreal)');
-const ANIM = join(source, 'Universal Animation Library[Standard]', 'Unreal-Godot', 'UAL1_Standard.glb');
+const HAIR = join(
+	source,
+	'Universal Base Characters[Standard]',
+	'Hairstyles',
+	'Rigged to Head Bone',
+	'glTF (Godot -Unreal)'
+);
+const ANIM = join(
+	source,
+	'Universal Animation Library[Standard]',
+	'Unreal-Godot',
+	'UAL1_Standard.glb'
+);
 
 /** a PNG as a JPEG of at most `size` px */
-function jpeg(file, size, name = file.split('/').pop().replace(/\.png$/, '.jpg'), dir = tmp) {
+function jpeg(
+	file,
+	size,
+	name = file
+		.split('/')
+		.pop()
+		.replace(/\.png$/, '.jpg'),
+	dir = tmp
+) {
 	const target = join(dir, name);
-	execFileSync('sips', ['-s', 'format', 'jpeg', '-s', 'formatOptions', '80', '-Z', String(size), file, '--out', target], {
-		stdio: 'ignore'
-	});
+	execFileSync(
+		'sips',
+		[
+			'-s',
+			'format',
+			'jpeg',
+			'-s',
+			'formatOptions',
+			'80',
+			'-Z',
+			String(size),
+			file,
+			'--out',
+			target
+		],
+		{
+			stdio: 'ignore'
+		}
+	);
 	return target;
 }
 
@@ -81,7 +116,10 @@ async function slim(document, size) {
 		}
 		const png = join(tmp, `${Math.random().toString(36).slice(2)}.png`);
 		writeFileSync(png, texture.getImage());
-		texture.setImage(readFileSync(jpeg(png, size))).setMimeType('image/jpeg').setURI('');
+		texture
+			.setImage(readFileSync(jpeg(png, size)))
+			.setMimeType('image/jpeg')
+			.setURI('');
 	}
 	await document.transform(prune(), dedup(), unpartition());
 	return document;
@@ -94,12 +132,25 @@ for (const body of ['Male', 'Female']) {
 	await io.write(join(out, `body_${body.toLowerCase()}.glb`), document);
 }
 jpeg(join(BASE, 'Textures', 'T_Superhero_Male_Ligh.png'), 1024, 'skin_male_light.jpg', out);
-jpeg(join(BASE, 'Textures', 'T_Superhero_Female_Light_BaseColor.png'), 1024, 'skin_female_light.jpg', out);
+jpeg(
+	join(BASE, 'Textures', 'T_Superhero_Female_Light_BaseColor.png'),
+	1024,
+	'skin_female_light.jpg',
+	out
+);
 
 // hair: one file, each style its own node
-const HAIRSTYLES = ['Hair_SimpleParted', 'Hair_Buzzed', 'Hair_Beard', 'Hair_Buns', 'Hair_Long', 'Hair_BuzzedFemale'];
+const HAIRSTYLES = [
+	'Hair_SimpleParted',
+	'Hair_Buzzed',
+	'Hair_Beard',
+	'Hair_Buns',
+	'Hair_Long',
+	'Hair_BuzzedFemale'
+];
 const hair = await readGltf(join(HAIR, `${HAIRSTYLES[0]}.gltf`));
-for (const name of HAIRSTYLES.slice(1)) mergeDocuments(hair, await readGltf(join(HAIR, `${name}.gltf`)));
+for (const name of HAIRSTYLES.slice(1))
+	mergeDocuments(hair, await readGltf(join(HAIR, `${name}.gltf`)));
 // one scene with every style in it
 const [scene, ...others] = hair.getRoot().listScenes();
 for (const other of others) {
@@ -128,7 +179,12 @@ for (const node of anims.getRoot().listNodes()) {
 	node.setSkin(null);
 }
 for (const mesh of anims.getRoot().listMeshes()) mesh.dispose();
-await anims.transform(resample({ tolerance: 1e-3 }), prune({ keepLeaves: true }), dedup(), unpartition());
+await anims.transform(
+	resample({ tolerance: 1e-3 }),
+	prune({ keepLeaves: true }),
+	dedup(),
+	unpartition()
+);
 await io.write(join(out, 'anims.glb'), anims);
 
 rmSync(tmp, { recursive: true, force: true });

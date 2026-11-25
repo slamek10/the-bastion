@@ -71,7 +71,7 @@ export function buildTownHall(): SceneModule {
 	const face = kit.screen(clock, 1.6, 1.6);
 	face.position.set(0, 7.4, 1.52);
 	tower.add(face);
-	tower.position.set(0, 0, -d / 2 + 1.5);
+	tower.position.set(0, 0, -d / 2 - 1.4);
 	tower.traverse((child) => (child.castShadow = true));
 	setPick(tower, { kind: 'room', id: 'townhall' });
 	hall.add(tower);
@@ -84,7 +84,7 @@ export function buildTownHall(): SceneModule {
 		roughness: 0.2
 	});
 	const crystal = new Mesh(kit.geo(new OctahedronGeometry(0.6, 0)), coreMat);
-	crystal.position.set(0, 10.2, -d / 2 + 1.5);
+	crystal.position.set(0, 10.2, -d / 2 - 1.4);
 	hall.add(crystal);
 	const ringMats = [kit.glow(0x38bdf8, 1.6), kit.glow(0xf472b6, 1.4)];
 	const rings = ringMats.map((material, i) => {
@@ -98,7 +98,7 @@ export function buildTownHall(): SceneModule {
 		kit.geo(new SphereGeometry(1.5, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2)),
 		kit.mat(0xd6ecff, { transparent: true, opacity: 0.22, roughness: 0.05, metalness: 0.1 })
 	);
-	dome.position.set(0, 9, -d / 2 + 1.5);
+	dome.position.set(0, 9, -d / 2 - 1.4);
 	hall.add(dome);
 	const coreLight = new PointLight(0x8b5cf6, 8, 14, 1.6);
 	coreLight.position.copy(crystal.position);
