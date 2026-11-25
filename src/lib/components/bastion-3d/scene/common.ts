@@ -5,6 +5,7 @@
  */
 import {
 	BoxGeometry,
+	ConeGeometry,
 	CanvasTexture,
 	Color,
 	CylinderGeometry,
@@ -32,6 +33,10 @@ export interface FrameContext {
 	day: number;
 	/** any agent turn runs */
 	agentsBusy: boolean;
+	/** where the camera is, for the town hall's fading roof */
+	camera: { x: number; y: number; z: number };
+	/** the town hall's roof and front fade out (Town Hall preset, a meeting) */
+	openTownHall: boolean;
 }
 
 export type Pick =
@@ -42,26 +47,6 @@ export interface SceneModule {
 	update: (dt: number, ctx: FrameContext) => void;
 	dispose: () => void;
 }
-
-/** room boxes, metres: x/z extent and the floor's height */
-export interface RoomBounds {
-	minX: number;
-	maxX: number;
-	minZ: number;
-	maxZ: number;
-	y: number;
-}
-
-export const FLOOR2 = 3.2;
-
-export const ROOMS: Record<RoomId, RoomBounds> = {
-	utility: { minX: -10, maxX: -4, minZ: -5, maxZ: 5, y: 0 },
-	living: { minX: -4, maxX: 6, minZ: -5, maxZ: 5, y: 0 },
-	bunker: { minX: 6, maxX: 13, minZ: -5, maxZ: 3, y: 0 },
-	studio: { minX: -10, maxX: 0, minZ: -5, maxZ: 5, y: FLOOR2 },
-	watchtower: { minX: 0, maxX: 6, minZ: -5, maxZ: 5, y: FLOOR2 },
-	terrace: { minX: -6, maxX: 10, minZ: 6, maxZ: 15, y: 0 }
-};
 
 export function setPick(object: Object3D, pick: Pick) {
 	object.traverse((child) => (child.userData.pick = pick));
@@ -204,4 +189,68 @@ export function drawLines(
 		y += size + 8;
 	}
 	screen.refresh();
+}
+
+/* ------------------------------------------------------------ buildings */
+
+const FACING_ROTATION = { s: 0, n: Math.PI, e: Math.PI / 2, w: -Math.PI / 2 } as const;
+
+/**
+ * A building's group, placed and turned so that its local +z side is the
+ * front (the door side). Returns the group and its local width (along x)
+ * and depth (along z).
+ */
+export function placeBuilding(
+	kit: Kit,
+	b: {
+		id: string;
+		x: number;
+		z: number;
+		w: number;
+		d: number;
+		facing: keyof typeof FACING_ROTATION;
+	}
+) {
+	const group = kit.group(b.id);
+	group.position.set(b.x, 0, b.z);
+	group.rotation.y = FACING_ROTATION[b.facing];
+	const sideways = b.facing === 'e' || b.facing === 'w';
+	return { group, w: sideways ? b.d : b.w, d: sideways ? b.w : b.d };
+}
+
+/** a hip roof: a four-sided pyramid over w × d, h tall, its base at y */
+export function hipRoof(kit: Kit, w: number, d: number, h: number, material: Material, y: number) {
+	const roof = new Mesh(kit.geo(new ConeGeometry(Math.SQRT1_2, 1, 4, 1)), material);
+	roof.rotation.y = Math.PI / 4;
+	// the cone's base is a square of side 1 after the turn; stretch it over the walls with an overhang
+	const outer = new Group();
+	outer.add(roof);
+	outer.scale.set(w + 0.8, h, d + 0.8);
+	outer.position.y = y + h / 2;
+	roof.castShadow = true;
+	return outer;
+}
+
+/**
+ * Four walls of w × d × h (front at +z) with a door gap in the front, and
+ * window holes are left to the caller (it adds glass on top). Returns the
+ * walls group and its front wall pieces (the town hall fades those).
+ */
+export function walls(kit: Kit, w: number, d: number, h: number, material: Material, door = 1.4) {
+	const group = new Group();
+	const t = 0.3;
+	const back = kit.box(w, h, t, material, 0, 0, -d / 2 + t / 2);
+	const left = kit.box(t, h, d, material, -w / 2 + t / 2, 0, 0);
+	const right = kit.box(t, h, d, material, w / 2 - t / 2, 0, 0);
+	const side = (w - door) / 2;
+	const frontL = kit.box(side, h, t, material, -w / 2 + side / 2, 0, d / 2 - t / 2);
+	const frontR = kit.box(side, h, t, material, w / 2 - side / 2, 0, d / 2 - t / 2);
+	const lintel = kit.box(door, h - 2.2, t, material, 0, 2.2, d / 2 - t / 2);
+	const front = [frontL, frontR, lintel];
+	for (const mesh of [back, left, right, ...front]) {
+		mesh.castShadow = true;
+		mesh.receiveShadow = true;
+		group.add(mesh);
+	}
+	return { group, front };
 }

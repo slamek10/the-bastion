@@ -27,17 +27,17 @@
 	let { store }: { store: Bastion3DState } = $props();
 
 	const ROOM_APP: Record<RoomId, AppId> = {
-		bunker: 'watch',
-		living: 'ai',
-		utility: 'heat',
-		studio: 'ha',
-		watchtower: 'cams',
-		terrace: 'cams'
+		forge: 'watch',
+		townhall: 'ai',
+		boiler: 'heat',
+		cottage: 'ha',
+		tower: 'cams',
+		pond: 'cams'
 	};
 	const ROOM_AGENT = Object.fromEntries(AGENT_IDS.map((id) => [AGENT_ROOM[id], id])) as Partial<
 		Record<RoomId, AgentId>
 	>;
-	ROOM_AGENT.terrace = 'vision';
+	ROOM_AGENT.pond = 'vision';
 
 	const room: RoomId | undefined = $derived(
 		store.selection?.kind === 'room'
@@ -52,7 +52,7 @@
 	const app = $derived(room ? ROOM_APP[room] : undefined);
 	const t = $derived(store.telemetry);
 	const agent = $derived(agentId ? t.agents[agentId] : undefined);
-	const mode = $derived(agentId ? agentMode(agentId, t) : 'IDLE');
+	const mode = $derived(agentId ? agentMode(agentId, t, Date.now(), store.meeting.active) : 'IDLE');
 	const chat = $derived(agentId ? store.chats[agentId] : undefined);
 	const feed = $derived(store.events.filter((event) => event.source === app).slice(0, 12));
 	const entities = $derived(
@@ -62,9 +62,7 @@
 				)
 			: []
 	);
-	const firstCamera = $derived(
-		store.bindings.watchtower.find((id) => id.startsWith('camera.')) ?? ''
-	);
+	const firstCamera = $derived(store.bindings.tower.find((id) => id.startsWith('camera.')) ?? '');
 
 	let message = $state('');
 
@@ -164,7 +162,7 @@
 			<!-- metrics -->
 			<section>
 				<h4>Live</h4>
-				{#if room === 'bunker'}
+				{#if room === 'forge'}
 					<div class="grid">
 						{#each t.containers as container (container.name)}
 							<div class="row" class:down={containerDown(container)}>
@@ -192,10 +190,15 @@
 							{#if !fresh}<span class="pill">standing · {ago(problem.since)}</span>{/if}
 						</p>
 					{/each}
-				{:else if room === 'living'}
+				{:else if room === 'townhall'}
 					{#each AGENT_IDS as id (id)}
 						<div class="row">
-							<span class="led" style="background: {hex(MODE_COLOR[agentMode(id, t)])}"></span>
+							<span
+								class="led"
+								style="background: {hex(
+									MODE_COLOR[agentMode(id, t, Date.now(), store.meeting.active)]
+								)}"
+							></span>
 							<span>{AGENT_NAMES[id]}</span>
 							<span class="dim">
 								{t.agents[id].state}{t.agents[id].available
@@ -205,7 +208,16 @@
 						</div>
 					{/each}
 					<p class="dim">Voice: {t.voice.phase}{t.voice.heard ? ` · “${t.voice.heard}”` : ''}</p>
-				{:else if room === 'utility'}
+					{#if store.meeting.active}
+						<button class="wide" onclick={() => store.endMeeting()}>
+							<Icon icon="mdi:account-group" /> End meeting
+						</button>
+					{:else}
+						<button class="wide" onclick={() => store.callMeeting()}>
+							<Icon icon="mdi:account-group" /> Call meeting
+						</button>
+					{/if}
+				{:else if room === 'boiler'}
 					<p>
 						Heating <b>{t.heat.active ? 'on' : 'off'}</b>{t.heat.enabled ? '' : ' (brain off)'}{t
 							.heat.alerts
@@ -223,7 +235,7 @@
 							</span>
 						</div>
 					{/each}
-				{:else if room === 'studio'}
+				{:else if room === 'cottage'}
 					<p>
 						{Object.values(t.ha).filter((e) => e.entity_id.startsWith('light.') && e.state === 'on')
 							.length} lights on ·

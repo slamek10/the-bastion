@@ -1,5 +1,7 @@
 /** the camera views of the bottom bar: position and look-at target, in metres */
-export type PresetId = 'overview' | 'rack' | 'core' | 'climate' | 'studio' | 'security' | 'terrace';
+import type { RoomId } from '$lib/types';
+
+export type PresetId = 'overview' | 'townhall' | 'forge' | 'boiler' | 'cottage' | 'tower' | 'pond';
 
 export interface Preset {
 	id: PresetId;
@@ -13,63 +15,57 @@ export const PRESETS: Preset[] = [
 	{
 		id: 'overview',
 		label: 'Overview',
-		icon: 'mdi:home-city-outline',
-		position: [16, 15, 22],
-		target: [0, 2.5, 0]
+		icon: 'mdi:home-group',
+		position: [30, 34, 42],
+		target: [0, 0, 0]
 	},
 	{
-		id: 'rack',
-		label: 'Server Rack',
-		icon: 'mdi:server',
-		position: [13.5, 3.2, 8],
-		target: [9.5, 1.3, -1]
+		id: 'townhall',
+		label: 'Town Hall',
+		icon: 'mdi:town-hall',
+		position: [0, 9, -7],
+		target: [0, 0.8, -18.5]
 	},
 	{
-		id: 'core',
-		label: 'Neural Core',
-		icon: 'mdi:brain',
-		position: [3, 4, 9],
-		target: [1, 1.4, -1]
+		id: 'forge',
+		label: 'Watch Forge',
+		icon: 'mdi:anvil',
+		position: [-13, 8, 0],
+		target: [-20, 1.5, -13]
 	},
 	{
-		id: 'climate',
-		label: 'Climate Deck',
+		id: 'boiler',
+		label: 'Boiler House',
 		icon: 'mdi:fire',
-		position: [-5, 3.5, 7],
-		target: [-7, 1.3, -1]
+		position: [-8, 8, 16],
+		target: [-21, 1.5, 10]
 	},
 	{
-		id: 'studio',
-		label: 'HA Studio',
-		icon: 'mdi:home-assistant',
-		position: [-4, 9, 10],
-		target: [-5, 4.2, -1.5]
+		id: 'cottage',
+		label: 'Home Cottage',
+		icon: 'mdi:home-heart',
+		position: [4, 8, 10],
+		target: [-4, 1.5, 22]
 	},
 	{
-		id: 'security',
-		label: 'Security Bunk',
+		id: 'tower',
+		label: 'Vision Tower',
 		icon: 'mdi:cctv',
-		position: [3.5, 9, 10],
-		target: [3, 4.2, -1.5]
+		position: [12, 10, 2],
+		target: [21, 3, -8]
 	},
-	{
-		id: 'terrace',
-		label: 'Terrace & Pool',
-		icon: 'mdi:pool',
-		position: [6, 6, 22],
-		target: [2, 0.5, 11]
-	}
+	{ id: 'pond', label: 'Pond', icon: 'mdi:waves', position: [10, 11, 30], target: [18, 0, 12] }
 ];
 
 export const presetById = (id: PresetId) =>
 	PRESETS.find((preset) => preset.id === id) ?? PRESETS[0];
 
-/** which preset shows a room or an agent's home */
-export const ROOM_PRESET = {
-	bunker: 'rack',
-	living: 'core',
-	utility: 'climate',
-	studio: 'studio',
-	watchtower: 'security',
-	terrace: 'terrace'
-} as const satisfies Record<string, PresetId>;
+/** which preset shows a building */
+export const ROOM_PRESET: Record<RoomId, PresetId> = {
+	townhall: 'townhall',
+	forge: 'forge',
+	boiler: 'boiler',
+	cottage: 'cottage',
+	tower: 'tower',
+	pond: 'pond'
+};

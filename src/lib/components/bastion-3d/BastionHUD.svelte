@@ -7,11 +7,13 @@
 	 */
 	import Icon from '@iconify/svelte';
 	import Inspector from './Inspector.svelte';
+	import AgentCard from './AgentCard.svelte';
+	import MeetingPanel from './MeetingPanel.svelte';
 	import CameraModal from './CameraModal.svelte';
 	import SettingsPanel from './SettingsPanel.svelte';
 	import { PRESETS } from './presets';
 	import { problemFresh } from '$lib/telemetry';
-	import { ORDER_DONE } from '$lib/types';
+	import { AGENT_IDS, ORDER_DONE } from '$lib/types';
 	import type { Bastion3DState } from '$lib/stores/bastion3d.svelte';
 	import type { DemoTrigger } from '$lib/demo';
 
@@ -91,7 +93,7 @@
 				class="pill warn plans"
 				onclick={() => {
 					store.select({ kind: 'agent', id: 'orchestrator' });
-					store.goto('core');
+					store.goto('townhall');
 				}}
 			>
 				<Icon icon="mdi:clipboard-check-outline" />
@@ -151,8 +153,19 @@
 							{trigger.label}
 						</button>
 					{/each}
+					<button onclick={() => (store.meeting.active ? store.endMeeting() : store.callMeeting())}>
+						<Icon icon="mdi:account-group" />
+						{store.meeting.active ? 'End meeting' : 'Call meeting'}
+					</button>
 				</div>
 			{/if}
+			<h4 class="dock-title">Agents</h4>
+			<div class="agents">
+				{#each AGENT_IDS as id (id)}
+					<AgentCard {store} {id} />
+				{/each}
+			</div>
+			<h4 class="dock-title">Events</h4>
 			<div class="feed scroll">
 				{#each store.events as event (event.id)}
 					<div class="event {event.level}">
@@ -168,6 +181,7 @@
 	</aside>
 
 	<Inspector {store} />
+	<MeetingPanel {store} />
 
 	<footer class="bottom glass">
 		<div class="presets scroll">
@@ -177,6 +191,14 @@
 				</button>
 			{/each}
 		</div>
+		<button
+			class="meet"
+			aria-pressed={store.meeting.active}
+			onclick={() => (store.meeting.active ? store.endMeeting() : store.callMeeting())}
+		>
+			<Icon icon="mdi:account-group" />
+			<span>{store.meeting.active ? 'End meeting' : 'Call meeting'}</span>
+		</button>
 		<div class="seg">
 			<button
 				aria-pressed={store.dayMode === 'twilight'}
@@ -286,6 +308,28 @@
 
 	.triggers button {
 		font-size: 0.75rem;
+	}
+
+	.dock-title {
+		margin: 0.2rem 0 0;
+		font-size: 0.68rem;
+		font-weight: 500;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		opacity: 0.55;
+	}
+
+	.agents {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.35rem;
+	}
+
+	.meet {
+		white-space: nowrap;
+		font-size: 0.8rem;
+		background: rgba(244, 114, 182, 0.18);
+		border-color: rgba(244, 114, 182, 0.45);
 	}
 
 	.feed {

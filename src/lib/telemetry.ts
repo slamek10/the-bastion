@@ -223,7 +223,7 @@ export function containerAlarm(t: Pick<Telemetry, 'containers' | 'problems'>, no
 	);
 }
 
-/** any Watch problem or container outage that's fresh: the bunker's red strobe */
+/** any Watch problem or container outage that's fresh: the forge beacon's red strobe */
 export function freshAlarm(t: Pick<Telemetry, 'containers' | 'problems'>, now = Date.now()) {
 	return t.problems.some((problem) => problemFresh(problem, now)) || containerAlarm(t, now);
 }

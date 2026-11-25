@@ -46,12 +46,12 @@ const CONTAINERS: [string, Telemetry['containers'][number]['app']][] = [
 const CAMERAS = ['gate', 'driveway', 'garden', 'terrace'];
 
 export const DEMO_BINDINGS: Bindings = {
-	bunker: ['switch.demo_rack_fan'],
-	living: ['light.demo_living'],
-	utility: ['climate.demo_boiler', 'sensor.demo_buffer_tank'],
-	studio: ['light.demo_studio', 'cover.demo_studio_left', 'cover.demo_studio_right'],
-	watchtower: CAMERAS.map((camera) => `camera.demo_${camera}`),
-	terrace: ['light.demo_pool', 'light.demo_garden']
+	forge: ['switch.demo_rack_fan'],
+	townhall: ['light.demo_living'],
+	boiler: ['climate.demo_boiler', 'sensor.demo_buffer_tank'],
+	cottage: ['light.demo_studio', 'cover.demo_studio_left', 'cover.demo_studio_right'],
+	tower: CAMERAS.map((camera) => `camera.demo_${camera}`),
+	pond: ['light.demo_pool', 'light.demo_garden']
 };
 
 function entity(id: string, state: string, attributes: Record<string, unknown> = {}): HaEntity {
@@ -142,7 +142,7 @@ export class DemoSimulator {
 			at: this.now()
 		};
 		t.ha = demoEntities();
-		// a problem that has stood for hours: shown in the bunker, not alarmed
+		// a problem that has stood for hours: shown at the forge, not alarmed
 		t.problems = [
 			{
 				key: 'pve|node|pve02',

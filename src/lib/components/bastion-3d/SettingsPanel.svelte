@@ -15,7 +15,7 @@
 	let draft: Bindings = $state(
 		untrack(() => structuredClone($state.snapshot(store.bindings)) as Bindings)
 	);
-	let room: RoomId = $state('studio');
+	let room: RoomId = $state('cottage');
 	let query = $state('');
 	let saving = $state(false);
 	let saved = $state('');

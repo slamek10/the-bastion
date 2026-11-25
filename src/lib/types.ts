@@ -14,17 +14,10 @@ export type AgentId = 'watchdog' | 'orchestrator' | 'thermal' | 'homekeeper' | '
 
 export const AGENT_IDS: AgentId[] = ['watchdog', 'orchestrator', 'thermal', 'homekeeper', 'vision'];
 
-/** rooms of the house; bindings.json maps each to Home Assistant entities */
-export type RoomId = 'bunker' | 'living' | 'utility' | 'studio' | 'watchtower' | 'terrace';
+/** the village's buildings and the pond; bindings.json maps each to Home Assistant entities */
+export type RoomId = 'townhall' | 'forge' | 'boiler' | 'cottage' | 'tower' | 'pond';
 
-export const ROOM_IDS: RoomId[] = [
-	'bunker',
-	'living',
-	'utility',
-	'studio',
-	'watchtower',
-	'terrace'
-];
+export const ROOM_IDS: RoomId[] = ['townhall', 'forge', 'boiler', 'cottage', 'tower', 'pond'];
 
 export type PeerState = 'ok' | 'connecting' | 'down' | 'not configured';
 

@@ -222,3 +222,27 @@ describe('fresh and standing', () => {
 		expect(noContainersReason(t)).toBeUndefined();
 	});
 });
+
+describe('bindings migration', () => {
+	it('moves the house rooms to the village buildings, merging and cleaning', async () => {
+		const { cleanBindings } = await import('./bindings');
+		const bindings = cleanBindings({
+			bunker: ['switch.fan'],
+			living: ['light.living'],
+			utility: ['climate.house'],
+			studio: ['light.studio', 'cover.left', 'bad id'],
+			watchtower: ['camera.gate'],
+			terrace: ['light.pool'],
+			pond: ['light.pool', 'switch.pump'],
+			attic: ['light.x']
+		});
+		expect(bindings).toEqual({
+			townhall: ['light.living'],
+			forge: ['switch.fan'],
+			boiler: ['climate.house'],
+			cottage: ['light.studio', 'cover.left'],
+			tower: ['camera.gate'],
+			pond: ['light.pool', 'switch.pump']
+		});
+	});
+});

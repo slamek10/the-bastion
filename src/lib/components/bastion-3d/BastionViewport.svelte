@@ -1,13 +1,16 @@
 <script lang="ts">
 	/**
-	 * The 3D view: renderer, scene, OrbitControls with damping, camera presets
-	 * (position and target eased over ~0.8 s), click selection by raycast, and
-	 * the robots' nameplates projected to the screen each frame. Rendering
+	 * The 3D village: renderer (one shadow-casting light), scene, OrbitControls
+	 * with damping, camera presets (position and target eased over ~0.8 s),
+	 * click selection by raycast, the villagers (their models load after the
+	 * scene shows; portraits are made once), and their nameplates projected to
+	 * the screen each frame. Rendering
 	 * pauses while the tab is hidden. Everything made here is disposed when the
 	 * component goes away (renderer.dispose + forceContextLoss included).
 	 */
 	import {
 		ACESFilmicToneMapping,
+		PCFSoftShadowMap,
 		PerspectiveCamera,
 		Raycaster,
 		SRGBColorSpace,
@@ -19,20 +22,21 @@
 	} from 'three';
 	import { untrack } from 'svelte';
 	import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-	import { buildHouse } from './scene/house';
-	import { buildServerBunker } from './scene/serverBunker';
-	import { buildNeuralCore } from './scene/neuralCore';
-	import { buildClimateDeck } from './scene/climateDeck';
-	import { buildHaStudio } from './scene/haStudio';
-	import { buildWatchtower } from './scene/watchtower';
+	import { buildVillage } from './scene/village';
+	import { buildTownHall } from './scene/townHall';
+	import { buildWatchForge } from './scene/watchForge';
+	import { buildBoilerHouse } from './scene/boilerHouse';
+	import { buildHomeCottage } from './scene/homeCottage';
+	import { buildVisionTower } from './scene/visionTower';
 	import { buildAgents, AGENT_NAMES, MODE_COLOR, type AgentMode } from './agents/agent';
+	import { loadCharacterAssets } from './agents/characters';
+	import { Disposer } from './disposer';
 	import { damp, type FrameContext, type Pick, type SceneModule } from './scene/common';
 	import { projectToScreen } from './projection';
 	import { presetById, ROOM_PRESET } from './presets';
 	import { allOf } from '$lib/bindings';
 	import { AGENT_IDS, type AgentId } from '$lib/types';
 	import type { Bastion3DState } from '$lib/stores/bastion3d.svelte';
-	import { AGENT_ROOM } from './agents/agent';
 
 	let { store, dev = false }: { store: Bastion3DState; dev?: boolean } = $props();
 
@@ -76,15 +80,15 @@
 
 	function onPick(pick: Pick, object: Object3D) {
 		if (pick.kind === 'agent') {
+			// agents walk anywhere: select without moving the camera
 			store.select({ kind: 'agent', id: pick.id });
-			store.goto(ROOM_PRESET[AGENT_ROOM[pick.id]]);
 		} else if (pick.kind === 'room') {
 			store.select({ kind: 'room', id: pick.id });
 			store.goto(ROOM_PRESET[pick.id]);
 		} else {
 			const cameras = allOf(store.bindings, pick.room, 'camera');
 			const index = Number(object.userData.cameraIndex ?? 0);
-			store.select({ kind: 'room', id: 'watchtower' });
+			store.select({ kind: 'room', id: 'tower' });
 			store.cameraModal = cameras[index] ?? cameras[0] ?? '';
 		}
 	}
@@ -102,9 +106,12 @@
 		renderer.outputColorSpace = SRGBColorSpace;
 		renderer.toneMapping = ACESFilmicToneMapping;
 		renderer.toneMappingExposure = 1.05;
+		// shadows from the sun only
+		renderer.shadowMap.enabled = true;
+		renderer.shadowMap.type = PCFSoftShadowMap;
 
 		const scene = new Scene();
-		const cam = new PerspectiveCamera(45, 1, 0.1, 200);
+		const cam = new PerspectiveCamera(45, 1, 0.1, 400);
 		const start = presetById(store.preset);
 		cam.position.set(...start.position);
 		const orbit = new OrbitControls(cam, renderer.domElement);
@@ -112,23 +119,33 @@
 		orbit.enableDamping = true;
 		orbit.dampingFactor = 0.08;
 		orbit.maxPolarAngle = Math.PI * 0.49;
-		orbit.minDistance = 2;
-		orbit.maxDistance = 60;
+		orbit.minDistance = 3;
+		orbit.maxDistance = 110;
 		orbit.addEventListener('start', () => (tween = undefined));
 		camera = cam;
 		controls = orbit;
 
 		const modules: SceneModule[] = [
-			buildHouse(scene),
-			buildServerBunker(),
-			buildNeuralCore(),
-			buildClimateDeck(),
-			buildHaStudio(),
-			buildWatchtower()
+			buildVillage(scene),
+			buildTownHall(),
+			buildWatchForge(),
+			buildBoilerHouse(),
+			buildHomeCottage(),
+			buildVisionTower()
 		];
 		const agents = buildAgents();
 		for (const module of modules) scene.add(module.group);
 		scene.add(agents.group);
+
+		// the villagers' models: loaded after the village shows, then their portraits
+		const models = new Disposer();
+		let closed = false;
+		loadCharacterAssets(models)
+			.then((assets) => {
+				if (closed) return;
+				store.portraits = agents.attach(assets, renderer);
+			})
+			.catch((error) => console.warn('[3d] characters', error));
 
 		// size
 		const resize = () => {
@@ -176,7 +193,9 @@
 			bindings: store.bindings,
 			time: 0,
 			day,
-			agentsBusy: false
+			agentsBusy: false,
+			camera: cam.position,
+			openTownHall: false
 		};
 		const loop = (now: number) => {
 			frame = requestAnimationFrame(loop);
@@ -189,6 +208,7 @@
 			ctx.time = time;
 			ctx.day = day;
 			ctx.agentsBusy = AGENT_IDS.some((id) => ctx.t.agents[id]?.busy);
+			ctx.openTownHall = store.preset === 'townhall' || store.meeting.active;
 
 			if (tween) {
 				tween.t = Math.min(1, tween.t + dt / 0.8);
@@ -199,7 +219,7 @@
 			}
 			orbit.update();
 			for (const module of modules) module.update(dt, ctx);
-			agents.update(dt, ctx);
+			agents.update(dt, ctx, store.meeting.active);
 			renderer.render(scene, cam);
 
 			// nameplates
@@ -239,8 +259,10 @@
 			renderer.domElement.removeEventListener('pointerdown', onDown);
 			renderer.domElement.removeEventListener('pointerup', onUp);
 			const before = { ...renderer.info.memory };
+			closed = true;
 			for (const module of modules) module.dispose();
 			agents.dispose();
+			models.dispose();
 			scene.clear();
 			orbit.dispose();
 			renderer.renderLists.dispose();
@@ -273,14 +295,12 @@
 			{#if id === 'orchestrator' && transcript}
 				<div class="transcript">{transcript}</div>
 			{/if}
-			<button
-				class="badge"
-				onclick={() => {
-					store.select({ kind: 'agent', id });
-					store.goto(ROOM_PRESET[AGENT_ROOM[id]]);
-				}}
-			>
-				<span class="dot"></span>
+			<button class="badge" onclick={() => store.select({ kind: 'agent', id })}>
+				{#if store.portraits[id]}
+					<img class="face" src={store.portraits[id]} alt="" />
+				{:else}
+					<span class="dot"></span>
+				{/if}
 				<span class="name">{AGENT_NAMES[id]}</span>
 				<span class="mode">{agent?.state === 'waiting' ? 'WAITING' : mode}</span>
 			</button>
@@ -331,6 +351,16 @@
 
 	.selected .badge {
 		background: color-mix(in srgb, var(--mode) 30%, rgba(8, 12, 28, 0.7));
+	}
+
+	.face {
+		width: 1.6rem;
+		height: 1.6rem;
+		margin: -0.15rem 0 -0.15rem -0.4rem;
+		border-radius: 50%;
+		background: color-mix(in srgb, var(--mode) 35%, #1e293b);
+		box-shadow: 0 0 0 2px var(--mode);
+		object-fit: cover;
 	}
 
 	.dot {

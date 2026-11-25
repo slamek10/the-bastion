@@ -16,6 +16,9 @@
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
+		"@gltf-transform/core": "^4.5.1",
+		"@gltf-transform/extensions": "^4.5.1",
+		"@gltf-transform/functions": "^4.5.1",
 		"@iconify/svelte": "^5.2.2",
 		"@sveltejs/adapter-node": "^5.5.7",
 		"@sveltejs/kit": "^2.69.2",

@@ -10,7 +10,18 @@ export interface Disposable {
 interface MaybeMesh {
 	geometry?: Disposable;
 	material?: Disposable | Disposable[];
+	/** a SkinnedMesh's skeleton (its bone texture) */
+	skeleton?: Disposable;
+	/** an InstancedMesh (its instance attributes) */
+	isInstancedMesh?: boolean;
+	dispose?: () => void;
 	traverse?: (fn: (child: MaybeMesh) => void) => void;
+}
+
+/** what an AnimationMixer needs to let go of a model */
+interface MixerLike {
+	stopAllAction: () => unknown;
+	uncacheRoot: (root: never) => void;
 }
 
 const TEXTURE_KEYS = [
@@ -43,6 +54,10 @@ export class Disposer {
 	trackTree<T extends MaybeMesh>(root: T): T {
 		const visit = (node: MaybeMesh) => {
 			if (node.geometry) this.items.add(node.geometry);
+			if (node.skeleton && typeof node.skeleton.dispose === 'function')
+				this.items.add(node.skeleton);
+			if (node.isInstancedMesh && typeof node.dispose === 'function')
+				this.items.add({ dispose: () => node.dispose!() });
 			const materials = node.material
 				? Array.isArray(node.material)
 					? node.material
@@ -60,6 +75,17 @@ export class Disposer {
 		if (root.traverse) root.traverse(visit);
 		else visit(root);
 		return root;
+	}
+
+	/** an animation mixer: its actions stopped and its cache for the model dropped */
+	trackMixer<T extends MixerLike>(mixer: T, root: unknown): T {
+		this.items.add({
+			dispose: () => {
+				mixer.stopAllAction();
+				mixer.uncacheRoot(root as never);
+			}
+		});
+		return mixer;
 	}
 
 	dispose() {

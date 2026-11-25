@@ -55,6 +55,14 @@ export class Bastion3DState {
 	chats: Record<AgentId, Chat> = $state(emptyChats());
 	/** no shared login on the server: only the demo can run */
 	configured = $state(true);
+	/** the town-hall meeting: client state only, one viewer */
+	meeting = $state({ active: false, startedAt: 0 });
+	/** work orders filed at the meeting table, per agent */
+	meetingOrders: Record<string, string[]> = $state({});
+	/** each agent's face, rendered once its model loads */
+	portraits: Partial<Record<AgentId, string>> = $state({});
+	/** the agent whose "assign task" box is open at the meeting */
+	assigning: AgentId | null = $state(null);
 
 	private source: EventSource | undefined;
 	private demo: DemoSimulator | undefined;
@@ -89,6 +97,8 @@ export class Bastion3DState {
 
 	private connect() {
 		this.stop();
+		this.meeting = { active: false, startedAt: 0 };
+		this.meetingOrders = {};
 		this.telemetry = emptyTelemetry();
 		this.events = [];
 		this.chats = emptyChats();
@@ -124,6 +134,43 @@ export class Bastion3DState {
 
 	trigger(kind: DemoTrigger) {
 		this.demo?.trigger(kind);
+	}
+
+	/** everyone walks to the town hall and sits at the table */
+	callMeeting() {
+		this.meeting = { active: true, startedAt: Date.now() };
+		this.goto('townhall');
+		this.events = pushEvent(this.events, {
+			id: `meeting-${Date.now()}`,
+			at: Date.now(),
+			source: 'bastion',
+			level: 'info',
+			text: 'The Orchestrator called a meeting at the town hall'
+		});
+	}
+
+	endMeeting() {
+		this.meeting = { active: false, startedAt: 0 };
+		this.assigning = null;
+		this.goto('overview');
+	}
+
+	/** a task given at the table: a work order for that agent's app */
+	async assignTask(id: AgentId, targets: OrderTarget[], text: string) {
+		// a lookup, not shown: a plain Set
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const before = new Set((this.telemetry.orders ?? []).map((order) => order.id));
+		const result = await this.fileOrder(id, targets, text);
+		if (result.ok) {
+			// the new order shows up in the telemetry: remember it on the card
+			const remember = () => {
+				const order = (this.telemetry.orders ?? []).find((o) => !before.has(o.id) && o.from === id);
+				if (order) this.meetingOrders[id] = [...(this.meetingOrders[id] ?? []), order.id];
+				return !!order;
+			};
+			if (!remember()) setTimeout(remember, 1500);
+		}
+		return result;
 	}
 
 	select(selection: Selection | null) {

@@ -1,0 +1,14 @@
+# Models
+
+All files here are made from two packs by **Quaternius** (https://quaternius.com), licensed **CC0 1.0 Universal (public domain)**: https://creativecommons.org/publicdomain/zero/1.0/. They were slimmed with `scripts/build-models.mjs` (normal and roughness maps dropped, textures resized to JPEG, unused clips removed).
+
+| File | Made from | Source | Author | Licence |
+| --- | --- | --- | --- | --- |
+| `body_male.glb` | Universal Base Characters [Standard]: `Superhero_Male_FullBody.gltf`, `T_Superhero_Male_Dark.png`, `T_Hair_1_BaseColor.png`, `T_Eye_Brown.png` | https://quaternius.itch.io/universal-base-characters | Quaternius | CC0 1.0 |
+| `body_female.glb` | Universal Base Characters [Standard]: `Superhero_Female_FullBody.gltf`, `T_Superhero_Female_Dark_BaseColor.png`, `T_Hair_2_BaseColor.png`, `T_Eye_Brown.png` | https://quaternius.itch.io/universal-base-characters | Quaternius | CC0 1.0 |
+| `skin_male_light.jpg` | Universal Base Characters [Standard]: `T_Superhero_Male_Ligh.png` | https://quaternius.itch.io/universal-base-characters | Quaternius | CC0 1.0 |
+| `skin_female_light.jpg` | Universal Base Characters [Standard]: `T_Superhero_Female_Light_BaseColor.png` | https://quaternius.itch.io/universal-base-characters | Quaternius | CC0 1.0 |
+| `hair.glb` | Universal Base Characters [Standard], Hairstyles rigged to the head bone: `Hair_SimpleParted`, `Hair_Buzzed`, `Hair_Beard`, `Hair_Buns`, `Hair_Long`, `Hair_BuzzedFemale`, `T_Hair_1_BaseColor.png`, `T_Hair_2_BaseColor.png` | https://quaternius.itch.io/universal-base-characters | Quaternius | CC0 1.0 |
+| `anims.glb` | Universal Animation Library [Standard]: `UAL1_Standard.glb`, clips `Idle_Loop`, `Walk_Loop`, `Jog_Fwd_Loop`, `Sitting_Idle_Loop`, `Sitting_Talking_Loop`, `Idle_Talking_Loop`, `Interact`, `Fixing_Kneeling` (the mannequin mesh removed) | https://quaternius.itch.io/universal-animation-library | Quaternius | CC0 1.0 |
+
+The outfits (shirts, trousers, shoes in each agent's colours) are coloured in The Bastion's shader by skeleton region, and the accessories (tie, scarf, cap, apron, binoculars, badge) are built in code; neither comes from a pack.

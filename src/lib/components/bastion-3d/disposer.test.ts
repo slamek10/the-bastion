@@ -50,4 +50,41 @@ describe('disposer', () => {
 		expect(bad.dispose).toHaveBeenCalled();
 		expect(good.dispose).toHaveBeenCalled();
 	});
+
+	it('covers skinned meshes, instanced meshes, mixers and render targets', () => {
+		const skeleton = resource();
+		const instanced = {
+			isInstancedMesh: true,
+			dispose: vi.fn(),
+			geometry: resource(),
+			material: resource()
+		};
+		const skinned = { geometry: resource(), material: resource(), skeleton };
+		const root = {
+			traverse(fn: (node: object) => void) {
+				fn(root);
+				fn(skinned);
+				fn(instanced);
+			}
+		};
+		const mixer = { stopAllAction: vi.fn(), uncacheRoot: vi.fn() };
+		const target = resource();
+		const d = new Disposer();
+		d.trackTree(root);
+		d.trackMixer(mixer, root);
+		d.track(target);
+		d.dispose();
+		for (const item of [
+			skeleton,
+			skinned.geometry,
+			skinned.material,
+			instanced.geometry,
+			instanced.material,
+			target
+		])
+			expect(item.dispose).toHaveBeenCalledTimes(1);
+		expect(instanced.dispose).toHaveBeenCalledTimes(1);
+		expect(mixer.stopAllAction).toHaveBeenCalled();
+		expect(mixer.uncacheRoot).toHaveBeenCalledWith(root);
+	});
 });

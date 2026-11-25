@@ -6,7 +6,7 @@
 
 	let { store }: { store: Bastion3DState } = $props();
 
-	const cameras = $derived(allOf(store.bindings, 'watchtower', 'camera'));
+	const cameras = $derived(allOf(store.bindings, 'tower', 'camera'));
 	const name = (id: string) => String(store.telemetry.ha[id]?.attributes.friendly_name ?? id);
 	const close = () => (store.cameraModal = null);
 </script>
