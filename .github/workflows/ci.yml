@@ -1,0 +1,42 @@
+# Type check, tests, lint (Prettier + ESLint) and a production build on every push and PR,
+# so a broken image is caught before docker-push.sh builds it
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # version comes from "packageManager" in package.json
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm run check
+
+      - name: Tests
+        run: pnpm test
+
+      - name: Lint (Prettier + ESLint)
+        run: pnpm run lint
+
+      - name: Build
+        run: pnpm run build
