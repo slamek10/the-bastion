@@ -4,7 +4,14 @@
 	 * way into the 3D view. Leaving /3d for here unmounts the whole scene.
 	 */
 	import Icon from '@iconify/svelte';
-	import { applyMessage, containerDown, emptyTelemetry, problemText } from '$lib/telemetry';
+	import {
+		applyMessage,
+		containerDown,
+		emptyTelemetry,
+		noContainersReason,
+		problemFresh,
+		problemText
+	} from '$lib/telemetry';
 	import type { Telemetry } from '$lib/types';
 
 	let { data } = $props();
@@ -69,10 +76,12 @@
 						</span>
 					</div>
 				{:else}
-					<p class="dim">{t.containers.length ? 'All running.' : 'Nothing from Watch yet.'}</p>
+					<p class="dim">{noContainersReason(t) ?? 'All running.'}</p>
 				{/each}
 				{#each t.problems as problem (problem.key)}
-					<p class="problem">{problemText(problem)}</p>
+					<p class="problem" class:standing={!problemFresh(problem)}>
+						{problemText(problem)}{problemFresh(problem) ? '' : ' (standing)'}
+					</p>
 				{/each}
 			</div>
 			<div class="glass">
@@ -152,5 +161,9 @@
 	.problem {
 		color: var(--warn);
 		margin: 0;
+	}
+
+	.problem.standing {
+		color: var(--dim);
 	}
 </style>

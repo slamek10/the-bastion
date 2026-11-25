@@ -10,6 +10,7 @@
 	import CameraModal from './CameraModal.svelte';
 	import SettingsPanel from './SettingsPanel.svelte';
 	import { PRESETS } from './presets';
+	import { problemFresh } from '$lib/telemetry';
 	import type { Bastion3DState } from '$lib/stores/bastion3d.svelte';
 	import type { DemoTrigger } from '$lib/demo';
 
@@ -66,7 +67,16 @@
 		</span>
 		{#if store.mode === 'live' && peersDown}<span class="pill bad">{peersDown} down</span>{/if}
 		{#if store.telemetry.problems.length}
-			<span class="pill bad"><Icon icon="mdi:alert" /> {store.telemetry.problems.length}</span>
+			{@const fresh = store.telemetry.problems.some((problem) => problemFresh(problem))}
+			<span
+				class="pill"
+				class:bad={fresh}
+				class:warn={!fresh}
+				title={fresh ? 'New problems' : 'Standing problems'}
+			>
+				<Icon icon={fresh ? 'mdi:alert' : 'mdi:clock-alert-outline'} />
+				{store.telemetry.problems.length}
+			</span>
 		{/if}
 		<span class="spacer"></span>
 		<button

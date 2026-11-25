@@ -9,11 +9,24 @@ describe('robot state machine', () => {
 		expect(agentMode('orchestrator', t)).toBe('IDLE');
 	});
 
-	it('Watchdog alerts on a container that is down', () => {
+	it('Watchdog alerts on a container seen going down, not on a standing outage', () => {
 		const t = emptyTelemetry();
-		t.containers = [{ name: 'bastion-heat', state: 'exited', restarts: 0 }];
-		expect(agentMode('watchdog', t)).toBe('ALERT');
-		expect(agentMode('thermal', t)).toBe('IDLE');
+		const now = 100_000_000;
+		t.containers = [{ name: 'bastion-heat', state: 'exited', restarts: 0, downSince: now - 5000 }];
+		expect(agentMode('watchdog', t, now)).toBe('ALERT');
+		expect(agentMode('thermal', t, now)).toBe('IDLE');
+		t.containers[0].downSince = 0;
+		expect(agentMode('watchdog', t, now)).toBe('IDLE');
+		t.problems = [
+			{
+				key: 'pve|node',
+				severity: 'critical',
+				message: 'prob_node_offline',
+				vars: {},
+				since: now - 1000
+			}
+		];
+		expect(agentMode('watchdog', t, now)).toBe('IDLE');
 	});
 
 	it('Vision alerts on fresh motion only', () => {

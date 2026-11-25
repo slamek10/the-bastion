@@ -30,7 +30,7 @@ import {
 } from '../scene/common';
 import { RACK_FRONT } from '../scene/serverBunker';
 import { motionSide, recentMotion } from '../scene/watchtower';
-import { containerDown } from '$lib/telemetry';
+import { containerAlarm } from '$lib/telemetry';
 import { AGENT_IDS, type AgentId, type RoomId, type Telemetry } from '$lib/types';
 
 export type AgentMode = 'IDLE' | 'WORKING' | 'COLLAB' | 'ALERT' | 'SPEAKING';
@@ -64,11 +64,8 @@ const VOICE_TALKING = new Set(['heard', 'routed', 'answer', 'speaking']);
 /** what a robot does now, from telemetry alone */
 export function agentMode(id: AgentId, t: Telemetry, now = Date.now()): AgentMode {
 	const agent = t.agents[id];
-	if (
-		id === 'watchdog' &&
-		(t.problems.some((p) => p.container) || t.containers.some(containerDown))
-	)
-		return 'ALERT';
+	// a fresh container problem or outage; standing ones are shown in the bunker, not alarmed
+	if (id === 'watchdog' && containerAlarm(t, now)) return 'ALERT';
 	if (id === 'vision' && recentMotion(t.cams.lastMotion, now)) return 'ALERT';
 	if (agent?.speaking) return 'SPEAKING';
 	if (id === 'orchestrator' && VOICE_TALKING.has(t.voice.phase)) return 'SPEAKING';

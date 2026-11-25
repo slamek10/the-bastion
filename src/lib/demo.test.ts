@@ -55,7 +55,8 @@ describe('demo simulator', () => {
 		demo.stop();
 
 		for (const id of AGENT_IDS) expect(seen.get(id)!.has('busy')).toBe(true);
-		expect(state.problems.length).toBe(0);
+		// the container outage cleared; only the standing demo problem is left
+		expect(state.problems.filter((p) => p.container)).toHaveLength(0);
 		expect(state.cams.lastMotion).toBeDefined();
 		expect(state).toEqual(demo.state);
 	});
@@ -64,10 +65,10 @@ describe('demo simulator', () => {
 		vi.useFakeTimers();
 		const demo = new DemoSimulator(() => {});
 		demo.trigger('containerDown');
-		expect(demo.state.problems).toHaveLength(1);
+		expect(demo.state.problems.filter((p) => p.container)).toHaveLength(1);
 		expect(demo.state.containers.some((c) => c.state === 'exited')).toBe(true);
 		vi.advanceTimersByTime(13_000);
-		expect(demo.state.problems).toHaveLength(0);
+		expect(demo.state.problems.filter((p) => p.container)).toHaveLength(0);
 		demo.stop();
 	});
 

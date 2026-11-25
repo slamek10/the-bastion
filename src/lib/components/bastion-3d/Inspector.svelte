@@ -9,7 +9,7 @@
 	import HlsPreview from './HlsPreview.svelte';
 	import { AGENT_NAMES, AGENT_ROOM, agentMode, MODE_COLOR } from './agents/agent';
 	import { ROOM_LABELS } from '$lib/bindings';
-	import { containerDown, problemText } from '$lib/telemetry';
+	import { containerDown, noContainersReason, problemFresh, problemText } from '$lib/telemetry';
 	import { AGENT_IDS, type AgentId, type AppId, type HaEntity, type RoomId } from '$lib/types';
 	import type { Bastion3DState } from '$lib/stores/bastion3d.svelte';
 
@@ -87,7 +87,13 @@
 	const hex = (value: number) => `#${value.toString(16).padStart(6, '0')}`;
 	const ago = (at: number) => {
 		const s = Math.round((Date.now() - at) / 1000);
-		return s < 60 ? `${s}s` : s < 3600 ? `${Math.round(s / 60)}m` : `${Math.round(s / 3600)}h`;
+		return s < 60
+			? `${s}s`
+			: s < 3600
+				? `${Math.round(s / 60)}m`
+				: s < 172_800
+					? `${Math.round(s / 3600)}h`
+					: `${Math.round(s / 86_400)}d`;
 	};
 </script>
 
@@ -131,13 +137,19 @@
 								</span>
 							</div>
 						{:else}
-							<p class="dim">No containers from Watch.</p>
+							<p class="warn-text">{noContainersReason(t)}</p>
 						{/each}
 					</div>
-					{#each t.problems as problem (problem.key)}
-						<p class="problem" class:critical={problem.severity === 'critical'}>
-							<Icon icon="mdi:alert" />
+					{#each [...t.problems].sort((a, b) => b.since - a.since) as problem (problem.key)}
+						{@const fresh = problemFresh(problem)}
+						<p
+							class="problem"
+							class:critical={fresh && problem.severity === 'critical'}
+							class:standing={!fresh}
+						>
+							<Icon icon={fresh ? 'mdi:alert' : 'mdi:clock-alert-outline'} />
 							{problemText(problem)}
+							{#if !fresh}<span class="pill">standing · {ago(problem.since)}</span>{/if}
 						</p>
 					{/each}
 				{:else if room === 'living'}
@@ -419,6 +431,14 @@
 
 	.problem.critical {
 		color: var(--bad);
+	}
+
+	.problem.standing {
+		color: var(--dim);
+	}
+
+	.warn-text {
+		color: var(--warn);
 	}
 
 	.entity {

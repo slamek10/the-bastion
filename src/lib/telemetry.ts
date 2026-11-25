@@ -152,7 +152,8 @@ export function appOf(container: string): AppId | undefined {
  */
 export function containersFromWatch(
 	snapshots: WatchSnapshot[],
-	previous: ContainerState[] = []
+	previous: ContainerState[] = [],
+	now = Date.now()
 ): ContainerState[] {
 	const before = new Map(previous.map((container) => [container.name, container]));
 	const out: ContainerState[] = [];
@@ -161,14 +162,19 @@ export function containersFromWatch(
 		for (const container of snapshot.data.containers ?? []) {
 			const old = before.get(container.name);
 			const restarted = container.state === 'restarting' && old?.state !== 'restarting';
-			out.push({
+			const next: ContainerState = {
 				name: container.name,
 				state: container.state,
 				...(container.health && { health: container.health }),
 				...(container.status && { status: container.status }),
 				restarts: (old?.restarts ?? 0) + (restarted ? 1 : 0),
 				...(appOf(container.name) && { app: appOf(container.name) })
-			});
+			};
+			if (containerDown(next)) {
+				// seen going down now, still down since then, or already down when first seen
+				next.downSince = old ? (containerDown(old) ? (old.downSince ?? 0) : now) : 0;
+			}
+			out.push(next);
 		}
 	}
 	return out.sort((a, b) => a.name.localeCompare(b.name));
@@ -195,6 +201,37 @@ export function problemsFromWatch(problems: WatchProblem[]): FleetProblem[] {
 /** a container that isn't fine: not running, unhealthy, or restarting */
 export function containerDown(container: ContainerState) {
 	return container.state !== 'running' || container.health === 'unhealthy';
+}
+
+/** a problem or an outage older than this is shown as standing, not as an alarm */
+export const STALE_AFTER = 30 * 60_000;
+
+export const problemFresh = (problem: FleetProblem, now = Date.now()) =>
+	now - problem.since < STALE_AFTER;
+
+/**
+ * The Watchdog's alarm: a container problem that's fresh, or a container
+ * seen going down in the last half hour (docker stop exits 0, which Watch
+ * doesn't call a problem). Outages that stand longer are shown, not alarmed.
+ */
+export function containerAlarm(t: Pick<Telemetry, 'containers' | 'problems'>, now = Date.now()) {
+	if (t.problems.some((problem) => problem.container && problemFresh(problem, now))) return true;
+	return t.containers.some(
+		(container) =>
+			containerDown(container) && !!container.downSince && now - container.downSince < STALE_AFTER
+	);
+}
+
+/** any Watch problem or container outage that's fresh: the bunker's red strobe */
+export function freshAlarm(t: Pick<Telemetry, 'containers' | 'problems'>, now = Date.now()) {
+	return t.problems.some((problem) => problemFresh(problem, now)) || containerAlarm(t, now);
+}
+
+/** why the racks have nothing to show, or undefined when they do */
+export function noContainersReason(t: Pick<Telemetry, 'containers' | 'peers'>) {
+	if (t.containers.length) return undefined;
+	if (t.peers.watch === 'ok') return 'no Docker device in Watch';
+	return `Watch ${t.peers.watch}`;
 }
 
 /** words for a Watch problem, without Watch's translations */

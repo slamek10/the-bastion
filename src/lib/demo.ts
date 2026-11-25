@@ -130,6 +130,16 @@ export class DemoSimulator {
 			at: this.now()
 		};
 		t.ha = demoEntities();
+		// a problem that has stood for hours: shown in the bunker, not alarmed
+		t.problems = [
+			{
+				key: 'pve|node|pve02',
+				severity: 'critical',
+				message: 'prob_node_offline',
+				vars: { name: 'pve02' },
+				since: this.now() - 3 * 3_600_000
+			}
+		];
 		t.agents = Object.fromEntries(AGENT_IDS.map((id) => [id, idleAgent()])) as Telemetry['agents'];
 		this.state = t;
 	}
@@ -232,7 +242,8 @@ export class DemoSimulator {
 									state: 'exited',
 									health: undefined,
 									status: 'Exited (137) just now',
-									cpu: 0
+									cpu: 0,
+									downSince: this.now()
 								}
 							: c
 					),
@@ -258,7 +269,8 @@ export class DemoSimulator {
 										state: 'running',
 										health: 'healthy',
 										status: 'Up 1 second (healthy)',
-										restarts: c.restarts + 1
+										restarts: c.restarts + 1,
+										downSince: undefined
 									}
 								: c
 						),

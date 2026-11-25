@@ -6,7 +6,13 @@
  */
 import { Color, InstancedMesh, Matrix4, PointLight } from 'three';
 import { Kit, ROOMS, drawLines, setPick, type SceneModule } from './common';
-import { containerDown, problemText } from '$lib/telemetry';
+import {
+	containerDown,
+	freshAlarm,
+	noContainersReason,
+	problemFresh,
+	problemText
+} from '$lib/telemetry';
 import type { ContainerState } from '$lib/types';
 
 const BLADES_PER_RACK = 14;
@@ -122,11 +128,23 @@ export function buildServerBunker(): SceneModule {
 			}
 			if (leds.instanceColor) leds.instanceColor.needsUpdate = true;
 
-			const alarm = t.problems.length > 0 || containers.some(containerDown);
+			// fresh: the red strobe; standing (older than half an hour): a slow amber beacon only
+			const alarm = freshAlarm(t);
+			const standing = !alarm && (t.problems.length > 0 || containers.some(containerDown));
 			const flash = alarm && Math.sin(time * 14) > 0.2 ? 1 : 0;
 			strobe.intensity = flash * 25;
-			beaconMat.emissiveIntensity = alarm ? 0.5 + flash * 3 : 0;
-			aisleMat.emissiveIntensity = alarm ? 0.4 : 0.8 + Math.sin(time * 1.5) * 0.15;
+			beaconMat.color.setHex(alarm ? 0xff2020 : 0xf59e0b);
+			beaconMat.emissive.setHex(alarm ? 0xff2020 : 0xf59e0b);
+			beaconMat.emissiveIntensity = alarm
+				? 0.5 + flash * 3
+				: standing
+					? 0.6 + Math.sin(time * 1.2) * 0.4
+					: 0;
+			aisleMat.emissiveIntensity = alarm
+				? 0.4
+				: containers.length
+					? 0.8 + Math.sin(time * 1.5) * 0.15
+					: 0.15;
 
 			redraw -= dt;
 			if (redraw <= 0) {
@@ -139,14 +157,31 @@ export function buildServerBunker(): SceneModule {
 				drawLines(
 					screen,
 					[
-						{
-							text: `${containers.length - down.length}/${containers.length} containers up`,
-							color: down.length ? '#f87171' : '#4ade80'
-						},
-						...t.problems.slice(0, 3).map((problem) => ({
-							text: `! ${problemText(problem)}`.slice(0, 34),
-							color: problem.severity === 'critical' ? '#f87171' : '#fbbf24'
-						})),
+						noContainersReason(t)
+							? { text: noContainersReason(t)!, color: '#fbbf24' }
+							: {
+									text: `${containers.length - down.length}/${containers.length} containers up`,
+									color: down.length ? '#f87171' : '#4ade80'
+								},
+						// fresh problems first; standing ones dimmer, marked with their age
+						...[...t.problems]
+							.sort((a, b) => b.since - a.since)
+							.slice(0, 3)
+							.map((problem) => {
+								const fresh = problemFresh(problem);
+								const hours = Math.round((Date.now() - problem.since) / 3_600_000);
+								return {
+									text: `${fresh ? '!' : '·'} ${problemText(problem)}${fresh ? '' : ` ${hours}h`}`.slice(
+										0,
+										34
+									),
+									color: !fresh
+										? '#94a3b8'
+										: problem.severity === 'critical'
+											? '#f87171'
+											: '#fbbf24'
+								};
+							}),
 						...peers
 					],
 					{ title: 'NETWORK HEALTH', size: 20 }

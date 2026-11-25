@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
 	applyMessage,
+	containerAlarm,
+	freshAlarm,
+	noContainersReason,
+	STALE_AFTER,
 	camEvent,
 	containersFromWatch,
 	diffTelemetry,
@@ -37,7 +41,14 @@ describe('Watch → containers', () => {
 				restarts: 0,
 				app: 'watch'
 			},
-			{ name: 'frigate', state: 'exited', status: 'Exited (1)', restarts: 0, app: 'cams' }
+			{
+				name: 'frigate',
+				state: 'exited',
+				status: 'Exited (1)',
+				restarts: 0,
+				app: 'cams',
+				downSince: 0
+			}
 		]);
 	});
 
@@ -145,5 +156,69 @@ describe('other apps', () => {
 		voice = voiceFrom(voice, { kind: 'answer', text: 'Gotovo.', at: 2 });
 		expect(voice).toEqual({ phase: 'answer', heard: 'upali svjetlo', answer: 'Gotovo.', at: 2 });
 		expect(voiceFrom(voice, { kind: 'heard', text: '  ', at: 3 }).phase).toBe('idle');
+	});
+});
+
+describe('fresh and standing', () => {
+	const now = 10 * STALE_AFTER;
+
+	it('a container seen going down alarms for half an hour, one already down never', () => {
+		let list = containersFromWatch(
+			[
+				snapshot([
+					{ name: 'a', state: 'running' },
+					{ name: 'b', state: 'exited' }
+				])
+			],
+			[],
+			now
+		);
+		expect(list.find((c) => c.name === 'b')!.downSince).toBe(0);
+		list = containersFromWatch(
+			[
+				snapshot([
+					{ name: 'a', state: 'exited' },
+					{ name: 'b', state: 'exited' }
+				])
+			],
+			list,
+			now
+		);
+		expect(list.find((c) => c.name === 'a')!.downSince).toBe(now);
+		// still down later: keeps when it went down
+		list = containersFromWatch([snapshot([{ name: 'a', state: 'exited' }])], list, now + 1000);
+		expect(list[0].downSince).toBe(now);
+		expect(containerAlarm({ containers: list, problems: [] }, now + 1000)).toBe(true);
+		expect(containerAlarm({ containers: list, problems: [] }, now + STALE_AFTER + 1)).toBe(false);
+		list = containersFromWatch([snapshot([{ name: 'a', state: 'running' }])], list, now + 2000);
+		expect(list[0].downSince).toBeUndefined();
+	});
+
+	it('only fresh problems alarm; only container ones wake the Watchdog', () => {
+		const old = {
+			key: 'pve|node',
+			severity: 'critical' as const,
+			message: 'prob_node_offline',
+			vars: {},
+			since: now - 3 * STALE_AFTER
+		};
+		const node = { ...old, since: now - 1000 };
+		const container = { ...node, key: 'docker|container|x', container: 'x' };
+		expect(freshAlarm({ containers: [], problems: [old] }, now)).toBe(false);
+		expect(freshAlarm({ containers: [], problems: [node] }, now)).toBe(true);
+		expect(containerAlarm({ containers: [], problems: [node] }, now)).toBe(false);
+		expect(containerAlarm({ containers: [], problems: [container] }, now)).toBe(true);
+		expect(
+			containerAlarm({ containers: [], problems: [{ ...container, since: old.since }] }, now)
+		).toBe(false);
+	});
+
+	it('says why the racks are empty', () => {
+		const t = emptyTelemetry();
+		expect(noContainersReason(t)).toBe('Watch not configured');
+		t.peers.watch = 'ok';
+		expect(noContainersReason(t)).toBe('no Docker device in Watch');
+		t.containers = [{ name: 'a', state: 'running', restarts: 0 }];
+		expect(noContainersReason(t)).toBeUndefined();
 	});
 });

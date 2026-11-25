@@ -35,6 +35,11 @@ export interface ContainerState {
 	health?: 'healthy' | 'unhealthy' | 'starting';
 	/** restarts seen since this server started (Watch doesn't count them) */
 	restarts: number;
+	/**
+	 * when this app saw it stop being fine (ms); 0 when it was already down
+	 * the first time it was seen, so an old outage doesn't look fresh
+	 */
+	downSince?: number;
 	cpu?: number;
 	mem?: number;
 	/** Docker's own words: "Up 3 hours (healthy)" */
