@@ -31,6 +31,7 @@ import {
 import { RACK_FRONT } from '../scene/serverBunker';
 import { motionSide, recentMotion } from '../scene/watchtower';
 import { containerAlarm } from '$lib/telemetry';
+import { TARGET_AGENT } from '$lib/orders';
 import { AGENT_IDS, type AgentId, type RoomId, type Telemetry } from '$lib/types';
 
 export type AgentMode = 'IDLE' | 'WORKING' | 'COLLAB' | 'ALERT' | 'SPEAKING';
@@ -69,15 +70,42 @@ export function agentMode(id: AgentId, t: Telemetry, now = Date.now()): AgentMod
 	if (id === 'vision' && recentMotion(t.cams.lastMotion, now)) return 'ALERT';
 	if (agent?.speaking) return 'SPEAKING';
 	if (id === 'orchestrator' && VOICE_TALKING.has(t.voice.phase)) return 'SPEAKING';
+	// a work order: the brief goes from the Orchestrator to the app's robot
+	if (orderPartner(id, t)) return 'COLLAB';
 	const others = AGENT_IDS.filter((other) => other !== id && t.agents[other]?.busy);
 	if (agent?.busy && others.length) return 'COLLAB';
-	if (agent?.busy || agent?.state === 'waiting') return 'WORKING';
+	if (agent?.busy || agent?.state === 'waiting' || orderWork(id, t)) return 'WORKING';
 	return 'IDLE';
 }
 
-/** the first other robot whose turn runs, for COLLAB */
+const ORCHESTRATOR_BUSY = new Set(['new', 'planning', 'approved', 'ready', 'shipping']);
+const APP_BUSY = new Set(['coding', 'ready']);
+
+/** an order keeps this robot busy: the Orchestrator plans and ships, an app robot codes */
+function orderWork(id: AgentId, t: Telemetry) {
+	return (t.orders ?? []).some((order) =>
+		id === 'orchestrator'
+			? ORCHESTRATOR_BUSY.has(order.status)
+			: APP_BUSY.has(order.status) && order.apps.some((app) => TARGET_AGENT[app] === id)
+	);
+}
+
+/** while an approved order's brief is handed over: the other robot of that order */
+function orderPartner(id: AgentId, t: Telemetry): AgentId | undefined {
+	for (const order of t.orders ?? []) {
+		if (order.status !== 'approved') continue;
+		const robots: AgentId[] = order.apps
+			.map((app) => TARGET_AGENT[app])
+			.filter((r) => r !== 'orchestrator');
+		if (id === 'orchestrator' && robots.length) return robots[0];
+		if (robots.includes(id)) return 'orchestrator';
+	}
+	return undefined;
+}
+
+/** who a robot walks toward in COLLAB: its order's partner, or another robot whose turn runs */
 export function collabPartner(id: AgentId, t: Telemetry): AgentId | undefined {
-	return AGENT_IDS.find((other) => other !== id && t.agents[other]?.busy);
+	return orderPartner(id, t) ?? AGENT_IDS.find((other) => other !== id && t.agents[other]?.busy);
 }
 
 type XZ = [number, number];

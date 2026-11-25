@@ -6,12 +6,24 @@
  */
 import { applyMessage, emptyTelemetry, idleAgent, pushEvent } from '$lib/telemetry';
 import {
+	canMove,
+	createOrder,
+	moveOrder,
+	visibleOrders,
+	type Actor,
+	type MoveDetails
+} from '$lib/orders';
+import {
 	AGENT_IDS,
 	type AgentId,
 	type Bindings,
 	type FeedEvent,
 	type FeedLevel,
 	type HaEntity,
+	type OrderStatus,
+	type OrderTarget,
+	type WorkOrder,
+	ORDER_REPO,
 	type Telemetry,
 	type TelemetryMessage
 } from '$lib/types';
@@ -386,6 +398,105 @@ export class DemoSimulator {
 				return;
 			}
 		}
+	}
+
+	/* ------------------------------------------------ work orders, played by a pretend orchestrator */
+
+	private orders: WorkOrder[] = [];
+
+	private putOrder(order: WorkOrder) {
+		this.orders = [order, ...this.orders.filter((o) => o.id !== order.id)];
+		this.set({ orders: visibleOrders(this.orders) });
+	}
+
+	private moveDemo(id: string, actor: Actor, to: OrderStatus, details: MoveDetails = {}) {
+		const order = this.orders.find((o) => o.id === id);
+		if (!order || !canMove(order, actor, to)) return undefined;
+		const next = moveOrder(order, actor, to, details, this.now());
+		this.putOrder(next);
+		this.log(
+			'bastion',
+			to === 'awaiting_approval' ? 'warn' : 'info',
+			`Order ${id}: ${next.log[next.log.length - 1].text}`
+		);
+		return next;
+	}
+
+	private plan(order: WorkOrder, revised = false) {
+		const repos = (order.apps.length ? order.apps : ['heat' as OrderTarget]).map(
+			(a) => ORDER_REPO[a]
+		);
+		return [
+			`**Goal:** ${order.request}`,
+			'',
+			`**Changes** (${repos.join(', ')}):`,
+			'- the files and functions the app session would touch',
+			'- a test for the new behaviour',
+			revised && order.feedback ? `- revised as you asked: ${order.feedback}` : '',
+			'',
+			'**Ship:** build, deploy, check health, roll back if it isn’t healthy.',
+			'',
+			'_Demo: no code is changed._'
+		]
+			.filter((line, i, all) => line || all[i - 1])
+			.join('\n');
+	}
+
+	fileOrder(from: AgentId, targets: OrderTarget[], request: string) {
+		const order = createOrder(from, targets, request, this.now(), `demo${++this.seq}`);
+		this.putOrder(order);
+		this.log('bastion', 'info', `Change requested: ${order.request.slice(0, 80)}`);
+		this.later(1500, () => this.moveDemo(order.id, 'orchestrator', 'planning'));
+		this.later(5000, () => {
+			const current = this.orders.find((o) => o.id === order.id);
+			if (current)
+				this.moveDemo(order.id, 'orchestrator', 'awaiting_approval', {
+					plan: this.plan(current),
+					apps: current.targets.length ? current.targets : ['heat']
+				});
+		});
+	}
+
+	answerOrder(id: string, action: 'approve' | 'changes' | 'reject' | 'cancel', text?: string) {
+		const to: Record<typeof action, OrderStatus> = {
+			approve: 'approved',
+			changes: 'planning',
+			reject: 'rejected',
+			cancel: 'cancelled'
+		};
+		try {
+			if (!this.moveDemo(id, 'you', to[action], { text })) return { ok: false, error: 'not now' };
+		} catch (error) {
+			return { ok: false, error: (error as Error).message };
+		}
+		if (action === 'changes') {
+			this.later(4000, () => {
+				const current = this.orders.find((o) => o.id === id);
+				if (current)
+					this.moveDemo(id, 'orchestrator', 'awaiting_approval', {
+						plan: this.plan(current, true),
+						apps: current.apps
+					});
+			});
+		} else if (action === 'approve') {
+			const app = this.orders.find((o) => o.id === id)?.apps[0] ?? 'heat';
+			const repo = ORDER_REPO[app];
+			const sha = Math.floor(this.random() * 0xfffffff)
+				.toString(16)
+				.padStart(7, '0');
+			this.later(4000, () =>
+				this.moveDemo(id, 'orchestrator', 'coding', { text: `Brief sent to ${repo}` })
+			);
+			this.later(12_000, () =>
+				this.moveDemo(id, 'orchestrator', 'ready', {
+					commit: { app, branch: 'main', commit: sha, summary: 'demo change' },
+					text: `ready to ship: ${repo} main ${sha}`
+				})
+			);
+			this.later(14_000, () => this.moveDemo(id, 'orchestrator', 'shipping'));
+			this.later(19_000, () => this.moveDemo(id, 'orchestrator', 'deployed'));
+		}
+		return { ok: true };
 	}
 
 	/** a demo chat answer, streamed like a real turn */

@@ -69,6 +69,7 @@ export function fleetSummary(t: Telemetry) {
 		}${t.heat.alerts ? `, ${t.heat.alerts} alerts` : ''}`,
 		`Cameras: ${t.cams.lastMotion ? `last ${t.cams.lastMotion.label} at ${t.cams.lastMotion.camera}, ${new Date(t.cams.lastMotion.at).toISOString()}` : 'no motion seen since start'}`,
 		`Voice: ${t.voice.phase}${t.voice.heard ? `, last heard “${t.voice.heard}”` : ''}`,
+		`Work orders: ${t.orders.length ? t.orders.map((o) => `${o.id} ${o.status}`).join(', ') : 'none'}`,
 		`Agents: ${Object.entries(t.agents)
 			.map(([id, a]) => `${id} ${a.state}${a.available ? '' : ' (unavailable)'}`)
 			.join(', ')}`,
@@ -87,6 +88,16 @@ const TOOLS = [
 		inputSchema: { type: 'object', properties: {}, additionalProperties: false }
 	},
 	{
+		name: 'work_orders',
+		description:
+			'The change requests filed through The Bastion: what was asked, for which app, where each one is (planning, waiting for approval, coding, shipping, deployed…), the plan and the commits.',
+		inputSchema: {
+			type: 'object',
+			properties: { id: { type: 'string', description: 'one order in full; leave out for all' } },
+			additionalProperties: false
+		}
+	},
+	{
 		name: 'recent_events',
 		description: 'The latest things that happened across the Bastion apps, newest first.',
 		inputSchema: {
@@ -99,6 +110,36 @@ const TOOLS = [
 
 export function runTool(name: string, input: Record<string, unknown>) {
 	if (name === 'fleet_status') return { text: fleetSummary(hub.state) };
+	// read only: filing, approving and building orders happen in the HUD and on the Mac
+	if (name === 'work_orders') {
+		const orders = hub.state.orders;
+		if (typeof input.id === 'string') {
+			const order = orders.find((o) => o.id === input.id);
+			if (!order)
+				return { text: 'No such order (only open ones and the last 10 finished are here).' };
+			return {
+				text: [
+					`${order.id} [${order.status}] for ${order.apps.join(', ') || 'any app'}: ${order.request}`,
+					order.plan ? `Plan:\n${order.plan}` : 'No plan yet.',
+					order.feedback ? `Changes asked: ${order.feedback}` : '',
+					...order.commits.map((c) => `Commit ${c.app} ${c.branch} ${c.commit}: ${c.summary}`),
+					'Log:',
+					...order.log.map((l) => `${new Date(l.at).toISOString()} ${l.by}: ${l.text}`)
+				]
+					.filter(Boolean)
+					.join('\n')
+			};
+		}
+		return {
+			text:
+				orders
+					.map(
+						(o) =>
+							`${o.id} [${o.status}] ${o.apps.join(', ') || 'any app'}: ${o.request.slice(0, 120)}`
+					)
+					.join('\n') || 'No work orders.'
+		};
+	}
 	if (name === 'recent_events') {
 		const limit = Math.max(1, Math.min(100, Number(input.limit) || 30));
 		const lines = hub.events

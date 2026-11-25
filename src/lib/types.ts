@@ -141,6 +141,8 @@ export interface Telemetry {
 	/** Home Assistant entities: climate, light, cover, sensor, binary_sensor, camera, switch */
 	ha: Record<string, HaEntity>;
 	agents: Record<AgentId, AgentState>;
+	/** change requests: open ones and the last few finished */
+	orders: WorkOrder[];
 }
 
 /** the parts a diff can replace as a whole (ha has its own entity diff) */
@@ -166,3 +168,89 @@ export type TurnEvent =
 	| { type: 'tool'; name: string }
 	| { type: 'text'; text: string }
 	| { type: 'done'; ok: boolean; error?: string };
+
+/* ------------------------------------------------------------ work orders */
+
+/**
+ * A change you ask for through a robot ("Thermal Sentinel, make the boiler
+ * card show the flow temperature"). The orchestrator session on the Mac
+ * picks it up, plans it, you approve the plan here, the app's session codes
+ * it, the orchestrator ships it; each step comes back to this order.
+ */
+export type OrderTarget = AppId | 'bastion';
+
+export const ORDER_TARGETS: OrderTarget[] = ['ha', 'ai', 'heat', 'cams', 'watch', 'bastion'];
+
+/** the repo / folder / session of each target */
+export const ORDER_REPO: Record<OrderTarget, string> = {
+	ha: 'bastion-ha',
+	ai: 'bastion-ai',
+	heat: 'bastion-heat',
+	cams: 'bastion-cams',
+	watch: 'bastion-watch',
+	bastion: 'the-bastion'
+};
+
+export type OrderStatus =
+	/** filed, the orchestrator hasn't taken it yet */
+	| 'new'
+	/** the orchestrator is working out the plan (again, after changes were asked for) */
+	| 'planning'
+	/** the plan is here: waiting for you */
+	| 'awaiting_approval'
+	/** you approved: the orchestrator sends the briefs */
+	| 'approved'
+	/** the app sessions are coding */
+	| 'coding'
+	/** committed and pushed: ready to ship */
+	| 'ready'
+	| 'shipping'
+	| 'deployed'
+	| 'rolled_back'
+	| 'failed'
+	/** you said no to the plan */
+	| 'rejected'
+	| 'cancelled';
+
+export const ORDER_DONE: OrderStatus[] = [
+	'deployed',
+	'rolled_back',
+	'failed',
+	'rejected',
+	'cancelled'
+];
+
+export interface OrderCommit {
+	app: OrderTarget;
+	branch: string;
+	commit: string;
+	summary: string;
+}
+
+export interface OrderLogLine {
+	at: number;
+	by: 'you' | 'orchestrator';
+	status?: OrderStatus;
+	text: string;
+}
+
+export interface WorkOrder {
+	id: string;
+	createdAt: number;
+	updatedAt: number;
+	/** the robot it was asked through */
+	from: AgentId;
+	/** the apps you meant; the plan may name others */
+	targets: OrderTarget[];
+	/** your words */
+	request: string;
+	status: OrderStatus;
+	/** the orchestrator's plan: what changes where, in markdown */
+	plan?: string;
+	/** what you asked to change in the plan */
+	feedback?: string;
+	/** the apps the approved plan touches (an app robot works while its app is coded) */
+	apps: OrderTarget[];
+	commits: OrderCommit[];
+	log: OrderLogLine[];
+}

@@ -7,10 +7,21 @@
 	 */
 	import Icon from '@iconify/svelte';
 	import HlsPreview from './HlsPreview.svelte';
+	import OrderCard from './OrderCard.svelte';
+	import { AGENT_TARGET, TARGET_AGENT } from '$lib/orders';
 	import { AGENT_NAMES, AGENT_ROOM, agentMode, MODE_COLOR } from './agents/agent';
 	import { ROOM_LABELS } from '$lib/bindings';
 	import { containerDown, noContainersReason, problemFresh, problemText } from '$lib/telemetry';
-	import { AGENT_IDS, type AgentId, type AppId, type HaEntity, type RoomId } from '$lib/types';
+	import {
+		AGENT_IDS,
+		ORDER_REPO,
+		ORDER_TARGETS,
+		type AgentId,
+		type AppId,
+		type HaEntity,
+		type OrderTarget,
+		type RoomId
+	} from '$lib/types';
 	import type { Bastion3DState } from '$lib/stores/bastion3d.svelte';
 
 	let { store }: { store: Bastion3DState } = $props();
@@ -56,6 +67,35 @@
 	);
 
 	let message = $state('');
+
+	// a change request: the robot's own app is picked to start with
+	let change = $state('');
+	let targets: OrderTarget[] = $state([]);
+	let filing = $state(false);
+	let fileError = $state('');
+	$effect(() => {
+		const id = agentId;
+		targets = id && AGENT_TARGET[id] ? [AGENT_TARGET[id]!] : [];
+	});
+	const orders = $derived(
+		(store.telemetry.orders ?? []).filter(
+			(order) =>
+				agentId === 'orchestrator' ||
+				order.from === agentId ||
+				[...order.apps, ...order.targets].some((app) => TARGET_AGENT[app] === agentId)
+		)
+	);
+
+	async function fileChange(event: SubmitEvent) {
+		event.preventDefault();
+		if (!agentId || !change.trim()) return;
+		filing = true;
+		fileError = '';
+		const result = await store.fileOrder(agentId, targets, change.trim());
+		filing = false;
+		if (result.ok) change = '';
+		else fileError = result.error ?? 'failed';
+	}
 	let busy: Record<string, boolean> = $state({});
 	let serviceError = $state('');
 	let chatBox: HTMLDivElement | undefined = $state();
@@ -339,6 +379,45 @@
 						</button>
 					</form>
 				</section>
+
+				<!-- code changes: filed here, planned and shipped by the orchestrator session on the Mac -->
+				<section class="changes">
+					<h4>Change the code</h4>
+					<form class="change" onsubmit={fileChange}>
+						<textarea
+							bind:value={change}
+							rows="3"
+							placeholder={AGENT_TARGET[agentId]
+								? `What should change in ${ORDER_REPO[AGENT_TARGET[agentId]!]}?`
+								: 'What should change, and in which app?'}></textarea>
+						<div class="targets">
+							{#each ORDER_TARGETS as target (target)}
+								<button
+									type="button"
+									aria-pressed={targets.includes(target)}
+									onclick={() =>
+										(targets = targets.includes(target)
+											? targets.filter((t) => t !== target)
+											: [...targets, target])}
+								>
+									{ORDER_REPO[target]}
+								</button>
+							{/each}
+						</div>
+						<div class="file-row">
+							<span class="dim small">
+								The orchestrator plans it; nothing is coded until you approve.
+							</span>
+							<button disabled={filing || !change.trim()}>
+								<Icon icon="mdi:file-send" /> File
+							</button>
+						</div>
+						{#if fileError}<p class="problem">{fileError}</p>{/if}
+					</form>
+					{#each orders as order (order.id)}
+						<OrderCard {store} {order} />
+					{/each}
+				</section>
 			{/if}
 		</div>
 	</aside>
@@ -490,6 +569,39 @@
 
 	.feed.warn {
 		color: var(--warn);
+	}
+
+	.changes {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.change {
+		flex-direction: column;
+	}
+
+	.change textarea {
+		resize: vertical;
+		font-size: 0.84rem;
+	}
+
+	.targets {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem;
+	}
+
+	.targets button {
+		font-size: 0.7rem;
+		padding: 0.2rem 0.5rem;
+	}
+
+	.file-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		justify-content: space-between;
 	}
 
 	.chat .lines {

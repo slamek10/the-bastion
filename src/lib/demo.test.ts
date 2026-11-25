@@ -80,4 +80,22 @@ describe('demo simulator', () => {
 		demo.service('cover', 'close_cover', 'cover.demo_studio_left');
 		expect(demo.state.ha['cover.demo_studio_left'].attributes.current_position).toBe(0);
 	});
+
+	it('plays an order through: plan, your approval, deployed', () => {
+		vi.useFakeTimers();
+		const demo = new DemoSimulator(() => {});
+		demo.fileOrder('thermal', ['heat'], 'show the flow temperature');
+		const id = demo.state.orders[0].id;
+		vi.advanceTimersByTime(6000);
+		expect(demo.state.orders[0].status).toBe('awaiting_approval');
+		expect(demo.state.orders[0].plan).toContain('bastion-heat');
+		// waits for you
+		vi.advanceTimersByTime(30_000);
+		expect(demo.state.orders[0].status).toBe('awaiting_approval');
+		expect(demo.answerOrder(id, 'approve').ok).toBe(true);
+		vi.advanceTimersByTime(20_000);
+		expect(demo.state.orders[0].status).toBe('deployed');
+		expect(demo.state.orders[0].commits).toHaveLength(1);
+		demo.stop();
+	});
 });

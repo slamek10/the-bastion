@@ -38,6 +38,11 @@ export const config = {
 	get publicUrl() {
 		return url('APP_URL');
 	},
+	/** the orchestrator session's key to /orders (32+ characters); without it, orders wait */
+	get ordersToken() {
+		const token = read('ORDERS_TOKEN');
+		return token.length >= 32 ? token : '';
+	},
 	get password() {
 		return read('APP_PASSWORD');
 	},
@@ -70,6 +75,7 @@ export const ENV_VARS = [
 	'BASTION_AI_URL',
 	'BASTION_AI_TOKEN',
 	'BASTION_AI_MCP_URL',
+	'ORDERS_TOKEN',
 	...Object.values(APP_ENV),
 	'DATA_DIR'
 ];

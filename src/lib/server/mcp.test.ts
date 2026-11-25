@@ -12,12 +12,13 @@ const rpc = (key: string, body: unknown) =>
 describe('own MCP', () => {
 	afterEach(() => delete process.env.BASTION_AI_TOKEN);
 
-	it('lists the two reading tools with a turn key, and refuses without', async () => {
+	it('lists the reading tools with a turn key, and refuses without', async () => {
 		const { key, close } = openTurn();
 		const response = await mcpRequest(rpc(key, { jsonrpc: '2.0', id: 1, method: 'tools/list' }));
 		const body = await response.json();
 		expect(body.result.tools.map((tool: { name: string }) => tool.name)).toEqual([
 			'fleet_status',
+			'work_orders',
 			'recent_events'
 		]);
 		close();

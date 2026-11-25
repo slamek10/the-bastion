@@ -11,6 +11,7 @@
 	import SettingsPanel from './SettingsPanel.svelte';
 	import { PRESETS } from './presets';
 	import { problemFresh } from '$lib/telemetry';
+	import { ORDER_DONE } from '$lib/types';
 	import type { Bastion3DState } from '$lib/stores/bastion3d.svelte';
 	import type { DemoTrigger } from '$lib/demo';
 
@@ -46,6 +47,13 @@
 		Object.values(store.telemetry.peers).filter((state) => state === 'down').length
 	);
 
+	const awaiting = $derived(
+		(store.telemetry.orders ?? []).filter((order) => order.status === 'awaiting_approval').length
+	);
+	const working = $derived(
+		(store.telemetry.orders ?? []).filter((order) => !ORDER_DONE.includes(order.status)).length
+	);
+
 	async function logout() {
 		await fetch('/_api/logout', { method: 'POST' });
 		location.href = '/';
@@ -76,6 +84,23 @@
 			>
 				<Icon icon={fresh ? 'mdi:alert' : 'mdi:clock-alert-outline'} />
 				{store.telemetry.problems.length}
+			</span>
+		{/if}
+		{#if awaiting}
+			<button
+				class="pill warn plans"
+				onclick={() => {
+					store.select({ kind: 'agent', id: 'orchestrator' });
+					store.goto('core');
+				}}
+			>
+				<Icon icon="mdi:clipboard-check-outline" />
+				{awaiting} plan{awaiting > 1 ? 's' : ''} to approve
+			</button>
+		{:else if working}
+			<span class="pill">
+				<Icon icon="mdi:hammer-wrench" />
+				{working} change{working > 1 ? 's' : ''} in progress
 			</span>
 		{/if}
 		<span class="spacer"></span>
@@ -206,6 +231,11 @@
 		font-weight: 500;
 		letter-spacing: 0.02em;
 		margin-right: 0.4rem;
+	}
+
+	.plans {
+		cursor: pointer;
+		border: 1px solid rgba(251, 191, 36, 0.5);
 	}
 
 	.spacer {

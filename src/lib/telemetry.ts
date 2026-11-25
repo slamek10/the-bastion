@@ -46,7 +46,8 @@ export function emptyTelemetry(now = Date.now()): Telemetry {
 		agents: Object.fromEntries(AGENT_IDS.map((id) => [id, idleAgent()])) as Record<
 			AgentId,
 			AgentState
-		>
+		>,
+		orders: []
 	};
 }
 

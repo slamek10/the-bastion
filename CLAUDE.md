@@ -20,6 +20,7 @@ The server access above is for logs and debugging. Changes the deploy needs on t
 
 ## This app
 
-- Port 5040, data in `/opt/the-bastion/data` (`agents.json`: the robots' bastion-ai session ids; `bindings.json`: room → Home Assistant entities).
+- Port 5040, data in `/opt/the-bastion/data` (`agents.json`: the robots' bastion-ai session ids; `bindings.json`: room → Home Assistant entities; `orders.json`: work orders).
+- Work orders (code changes asked for in the HUD) go to the orchestrator session through `/orders` with `ORDERS_TOKEN`; the rules (only the user approves, the approved plan is fixed) are in `src/lib/orders.ts`, the protocol in `docs/ORCHESTRATOR.md`.
 - It has no Docker socket and no write tools: containers come from Bastion Watch, the robots' tools are read-only, and Home Assistant is changed only from HUD buttons (`/_api/ha/service`, domains light, cover, climate, switch, scene, script).
 - Checks: `pnpm test`, `pnpm run check`, `pnpm run lint` (Prettier + ESLint), `pnpm run build`. Local Node 22.12 can't run pnpm 11, so `packageManager` pins pnpm 10.

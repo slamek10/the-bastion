@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { agentMode } from './agent';
+import { agentMode, collabPartner } from './agent';
+import { createOrder } from '$lib/orders';
 import { emptyTelemetry } from '$lib/telemetry';
 
 describe('robot state machine', () => {
@@ -60,5 +61,21 @@ describe('robot state machine', () => {
 		expect(agentMode('thermal', t)).toBe('SPEAKING');
 		t.agents.homekeeper = { ...t.agents.homekeeper, state: 'waiting' };
 		expect(agentMode('homekeeper', t)).toBe('WORKING');
+	});
+
+	it('work orders: the brief walks over, then the app robot codes', () => {
+		const t = emptyTelemetry();
+		const order = createOrder('thermal', ['heat'], 'x', 1, 'o1');
+		t.orders = [{ ...order, status: 'approved' }];
+		expect(agentMode('orchestrator', t)).toBe('COLLAB');
+		expect(collabPartner('orchestrator', t)).toBe('thermal');
+		expect(agentMode('thermal', t)).toBe('COLLAB');
+		expect(agentMode('vision', t)).toBe('IDLE');
+		t.orders = [{ ...order, status: 'coding' }];
+		expect(agentMode('thermal', t)).toBe('WORKING');
+		expect(agentMode('orchestrator', t)).toBe('IDLE');
+		t.orders = [{ ...order, status: 'shipping' }];
+		expect(agentMode('orchestrator', t)).toBe('WORKING');
+		expect(agentMode('thermal', t)).toBe('IDLE');
 	});
 });

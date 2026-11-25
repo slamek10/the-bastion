@@ -13,6 +13,7 @@ import {
 	type AgentId,
 	type Bindings,
 	type FeedEvent,
+	type OrderTarget,
 	type RoomId,
 	type Telemetry,
 	type TelemetryMessage,
@@ -196,6 +197,43 @@ export class Bastion3DState {
 		return response.ok && body.url
 			? { url: body.url }
 			: { error: body.error ?? `${response.status}` };
+	}
+
+	/** files a change request through a robot */
+	async fileOrder(from: AgentId, targets: OrderTarget[], request: string) {
+		if (this.mode === 'demo') {
+			this.demo?.fileOrder(from, targets, request);
+			return { ok: true };
+		}
+		const response = await fetch('/_api/orders', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ from, targets, request })
+		});
+		return (await response.json().catch(() => ({ ok: false, error: `${response.status}` }))) as {
+			ok: boolean;
+			error?: string;
+		};
+	}
+
+	/** your answer to a plan, or cancelling */
+	async answerOrder(
+		id: string,
+		action: 'approve' | 'changes' | 'reject' | 'cancel',
+		text?: string
+	) {
+		if (this.mode === 'demo') {
+			return this.demo?.answerOrder(id, action, text) ?? { ok: false };
+		}
+		const response = await fetch(`/_api/orders/${encodeURIComponent(id)}`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ action, ...(text && { text }) })
+		});
+		return (await response.json().catch(() => ({ ok: false, error: `${response.status}` }))) as {
+			ok: boolean;
+			error?: string;
+		};
 	}
 
 	private line(id: AgentId, line: ChatLine) {

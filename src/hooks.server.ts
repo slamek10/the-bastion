@@ -2,10 +2,12 @@ import type { Handle } from '@sveltejs/kit';
 import { building } from '$app/environment';
 import { hasSession, missingConfig } from '$lib/server/auth';
 import { startTelemetry } from '$lib/server/telemetry';
+import { startOrders } from '$lib/server/orders';
 import { checkAvailability } from '$lib/server/agents';
 
 if (!building) {
 	startTelemetry();
+	startOrders();
 	checkAvailability().catch(() => {});
 	setInterval(() => checkAvailability().catch(() => {}), 10 * 60_000).unref?.();
 }
